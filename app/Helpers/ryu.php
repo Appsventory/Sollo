@@ -1,6 +1,4 @@
 <?php
-
-
 function view_include(string $path, array $data = [])
 {
     $baseDir = realpath(__DIR__ . '/../views'); // misalnya views/ sejajar dengan app/
@@ -35,4 +33,10 @@ function method($method)
     return <<<HTML
     <input type="hidden" name="_method" value="$method">
     HTML;
+}
+
+function root_path(string $path = ''): string
+{
+    $root = dirname(__DIR__);
+    return $root . ($path ? '/' . ltrim($path, '/') : '');
 }

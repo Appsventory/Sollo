@@ -69,13 +69,13 @@ composer install
 
 ### 3. Configure Environment
 ```bash
-cp .env.example .env
+php fany make:env --name="My App" --with-example
 # Edit .env file with your configuration
 ```
 
 ### 4. Start Development Server
 ```bash
-php fany server --p 8000
+php fany server
 ```
 
 ### 5. Access Your Application

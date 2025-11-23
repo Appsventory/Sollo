@@ -77,8 +77,10 @@ Renders a template file with optional data variables and outputs the result.
 @endif
 
 <!-- Loops -->
-@foreach($posts as $post)
-    <article>{{ $post->title }}</article>
+@foreach ($users as $user)
+    <div>{{ $user['name'] }}</div>
+@empty //foreach suport @empty (opsional)
+    <p>No users found.</p>
 @endforeach
 
 @for($i = 0; $i < 10; $i++)

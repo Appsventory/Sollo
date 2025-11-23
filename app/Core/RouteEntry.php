@@ -7,6 +7,7 @@ class RouteEntry
     public $method;
     public $uri;
     public $action;
+    public $name;
     public $middleware = [];
 
     public function __construct($method, $uri, $action)
@@ -19,6 +20,12 @@ class RouteEntry
     public function middleware($name)
     {
         $this->middleware[] = $name;
+        return $this;
+    }
+    public function name($name)
+    {
+        $this->name = $name;
+        Router::$namedRoutes[$name] = $this->uri;
         return $this;
     }
 }

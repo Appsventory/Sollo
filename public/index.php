@@ -1,6 +1,7 @@
 <?php
 
 use App\Core\Router;
+use App\Exceptions\Handler;
 
 /*
 |--------------------------------------------------------------------------
@@ -29,6 +30,6 @@ loadEnv(__DIR__ . '/../.env');
 |
 */
 
-$router = new Router();
+Handler::register();
 require_once __DIR__ . '/../app/Routes/web.php';
-$router->dispatch();
+Router::dispatch();

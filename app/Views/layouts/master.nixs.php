@@ -12,10 +12,19 @@
         body {
             font-family: 'Inter', sans-serif;
         }
+        .brand-text {
+            color: #DC143C;
+        }
+        .bg-brand {
+            background-color: #DC143C;
+        }
+        .border-brand {
+            border-color: #DC143C;
+        }
     </style>
 </head>
 
-<body class="bg-[#161d2f] text-[#cbd5e1] min-h-screen flex items-center justify-center p-6">
+<body class="bg-[#161d2f] text-[#cbd5e1] min-h-screen flex flex-col  items-center justify-center p-6">
     <main>
         @yield('content')
     </main>

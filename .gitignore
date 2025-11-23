@@ -1,2 +1,10 @@
 /vendor/
+/app/Controllers/ErrorController.php
+/app/Views/errors/404.nixs.php
+/app/Views/errors/500.nixs.php
+/app/Console/Commands/stubs
+/public/js/ryu.ninecode.js
+/storage/*
+composer.json
 .env
+.DS_Store

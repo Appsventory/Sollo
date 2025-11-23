@@ -28,6 +28,51 @@ Router::post('/user', 'UserController@store')->middleware('AuthMiddleware');
 Router::get('/post/{id}', 'PostController@show')->middleware('AuthMiddleware');
 ```
 
+##### Closure Routing Examples
+
+```php
+//Example 1: Simple Response
+Router::get('/', function() {
+    return "Welcome to NineVerse!";
+});
+
+//Example 2: JSON Response
+Router::get('/api/status', function() {
+    return [
+        'status' => 'online',
+        'version' => '2.0.0'
+    ];
+});
+
+//Example 3: With Parameters
+Router::get('/user/{id}', function($id) {
+    return [
+        'id' => $id,
+        'name' => 'User ' . $id
+    ];
+});
+
+//Example 4: Multiple Parameters
+Router::get('/post/{id}/comment/{commentId}', function($id, $commentId) {
+    return [
+        'post_id' => $id,
+        'comment_id' => $commentId
+    ];
+});
+
+//Example 5: Return JSON explicitly
+Router::get('/api/posts', function() {
+    header('Content-Type: application/json');
+    echo json_encode([
+        'success' => true,
+        'data' => [
+            ['id' => 1, 'title' => 'Post 1'],
+            ['id' => 2, 'title' => 'Post 2']
+        ]
+    ]);
+});
+```
+
 ## 🛡️ Middleware
 
 Middleware can be defined as:

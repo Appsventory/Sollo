@@ -2,138 +2,149 @@
 
 namespace App\Core;
 
-use PDO;
-use PDOException;
-use PDOStatement;
-
 class Database
 {
-    private static ?Database $instance = null;
-    private PDO $dbh;
-    private ?PDOStatement $stmt = null;
+    private static $instance = null;
+    private $connection = null;
 
     private function __construct()
     {
-        $host = env('DB_HOST', 'localhost');
-        $user = env('DB_USER', 'root');
-        $pass = env('DB_PASS', '');
-        $dbName = env('DB_NAME', 'my_database');
+        $this->connect();
+    }
 
-        $dsn = "mysql:host=$host;dbname=$dbName;charset=utf8mb4";
+    public static function getInstance()
+    {
+        if (self::$instance === null) {
+            self::$instance = new self();
+        }
+        return self::$instance;
+    }
 
-        $options = [
-            PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
-            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-            PDO::ATTR_PERSISTENT         => true,
-        ];
+    private function connect()
+    {
+        $this->loadEnv();
+
+        $host = $_ENV['DB_HOST'] ?? '127.0.0.1';
+        $port = $_ENV['DB_PORT'] ?? '3306';
+        $database = $_ENV['DB_DATABASE'] ?? '';
+        $username = $_ENV['DB_USERNAME'] ?? 'root';
+        $password = $_ENV['DB_PASSWORD'] ?? '';
+        $driver = $_ENV['DB_CONNECTION'] ?? 'mysql';
+        $charset = $_ENV['DB_CHARSET'] ?? 'utf8mb4';
 
         try {
-            $this->dbh = new PDO($dsn, $user, $pass, $options);
-        } catch (PDOException $e) {
-            exit("DB Connection Failed: " . $e->getMessage());
+            $dsn = "{$driver}:host={$host};port={$port};dbname={$database};charset={$charset}";
+            
+            $this->connection = new \PDO($dsn, $username, $password, [
+                \PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION,
+                \PDO::ATTR_DEFAULT_FETCH_MODE => \PDO::FETCH_ASSOC,
+                \PDO::ATTR_EMULATE_PREPARES => false,
+            ]);
+        } catch (\PDOException $e) {
+            throw new \Exception("Database connection failed: " . $e->getMessage());
         }
     }
 
-
-    public static function getInstance(): static
+    public function getConnection()
     {
-        if (!static::$instance) {
-            static::$instance = new static();
-        }
-        return static::$instance;
+        return $this->connection;
     }
 
-
-    public function query(string $sql): static
+    private function loadEnv()
     {
-        $this->stmt = $this->dbh->prepare($sql);
-        return $this;
-    }
-
-    public function bind(string|int $param, mixed $value, int $type = 0): static
-    {
-        if ($type === 0) {
-            $type = match (true) {
-                is_int($value)   => PDO::PARAM_INT,
-                is_bool($value)  => PDO::PARAM_BOOL,
-                is_null($value)  => PDO::PARAM_NULL,
-                default          => PDO::PARAM_STR,
-            };
+        if (!file_exists('.env')) {
+            return;
         }
 
-        $this->stmt->bindValue($param, $value, $type);
-        return $this;
+        $lines = file('.env', FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+        
+        foreach ($lines as $line) {
+            if (strpos(trim($line), '#') === 0) {
+                continue;
+            }
+
+            if (strpos($line, '=') !== false) {
+                list($key, $value) = explode('=', $line, 2);
+                $key = trim($key);
+                $value = trim($value);
+                
+                // Remove quotes
+                $value = trim($value, '"\'');
+                
+                if (!array_key_exists($key, $_ENV)) {
+                    $_ENV[$key] = $value;
+                    putenv("{$key}={$value}");
+                }
+            }
+        }
     }
 
-    public function execute(): bool
+    /**
+     * Execute raw SQL query and return result
+     */
+    public function execute($sql, $bindings = [])
     {
-        return $this->stmt->execute();
+        try {
+            $stmt = $this->connection->prepare($sql);
+            $stmt->execute($bindings);
+            return true;
+        } catch (\PDOException $e) {
+            throw new \Exception("Execution failed: " . $e->getMessage());
+        }
     }
 
-    public function resultSet(): array
+    /**
+     * Execute raw SQL and get results
+     */
+    public function select($sql, $bindings = [])
     {
-        $this->execute();
-        return $this->stmt->fetchAll();
+        try {
+            $stmt = $this->connection->prepare($sql);
+            $stmt->execute($bindings);
+            return $stmt->fetchAll(\PDO::FETCH_ASSOC);
+        } catch (\PDOException $e) {
+            throw new \Exception("Query failed: " . $e->getMessage());
+        }
     }
 
-    public function single(): array|false
+    /**
+     * Get last inserted ID
+     */
+    public function lastInsertId()
     {
-        $this->execute();
-        return $this->stmt->fetch();
+        return $this->connection->lastInsertId();
     }
 
-    public function fetchColumn(): mixed
+        /**
+     * Begin transaction
+     */
+    public function beginTransaction()
     {
-        $this->execute();
-        return $this->stmt->fetchColumn();
+        return $this->connection->beginTransaction();
     }
 
-    public function rowCount(): int
+    /**
+     * Commit transaction
+     */
+    public function commit()
     {
-        return $this->stmt->rowCount();
+        return $this->connection->commit();
     }
 
-    public function lastInsertId(): int
+    /**
+     * Rollback transaction
+     */
+    public function rollback()
     {
-        return (int) $this->dbh->lastInsertId();
+        return $this->connection->rollBack();
     }
+    
+    // Prevent cloning
+    private function __clone() {}
 
-    // Tambahan opsional: Transaksi
-    public function beginTransaction(): void
+    // Prevent unserialization
+    public function __wakeup()
     {
-        $this->dbh->beginTransaction();
-    }
-
-    public function commit(): void
-    {
-        $this->dbh->commit();
-    }
-
-    public function rollBack(): void
-    {
-        $this->dbh->rollBack();
-    }
-
-    // Opsional: Shortcut untuk eksekusi insert/update/delete tanpa perlu call bind+execute
-    public function run(string $sql, array $params = []): bool
-    {
-        $this->stmt = $this->dbh->prepare($sql);
-        return $this->stmt->execute($params);
-    }
-
-    // Opsional: fetch satu baris dengan bind otomatis
-    public function fetch(string $sql, array $params = []): array|false
-    {
-        $this->stmt = $this->dbh->prepare($sql);
-        $this->stmt->execute($params);
-        return $this->stmt->fetch();
-    }
-
-    // Opsional: fetch semua baris dengan bind otomatis
-    public function fetchAll(string $sql, array $params = []): array
-    {
-        $this->stmt = $this->dbh->prepare($sql);
-        $this->stmt->execute($params);
-        return $this->stmt->fetchAll();
+        throw new \Exception("Cannot unserialize singleton");
     }
 }
