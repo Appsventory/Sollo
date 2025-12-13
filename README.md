@@ -29,8 +29,6 @@
 ## ✨ Key Features
 
 - 🎯 **Simple & Lightweight** - Minimalist framework that's easy to understand and use
-- ⚡ **High Performance** - Fast and efficient without unnecessary overhead
-- 🔧 **Full Control** - Complete control over your application without excessive complexity
 - 🚀 **Easy Setup** - Simple installation and configuration process
 - 📝 **Clean Code** - Clean code structure that's easy to maintain
 - 📱 **Modern PHP** - Leverages the latest PHP 8.3+ features
@@ -40,18 +38,18 @@
 ### Core Framework
 - **PHP 8.3+** - Modern PHP with latest features
 - **Custom Routing** - Simple yet powerful routing system
-- **Template Engine** - Lightweight and flexible template system
+- **Template Engine** - Lightweight and flexible template system Lite
 - **Middleware Support** - Request filtering and processing
 
 ### Database Support
 - **MySQL** - Primary database support with full feature set
-- **SQLite** - Lightweight database option for development
+- **SQLite** - Early SQLite support – bugs may occur.
 
 ## 📋 System Requirements
 
 - **PHP** >= 8.3
 - **Web Server** - Apache/Nginx with URL rewriting
-- **Database** - MySQL 5.7+ or SQLite 3+
+- **Database** - MySQL
 - **Composer** - For dependency management (recommended)
 
 ## 🚀 Quick Start
@@ -116,14 +114,13 @@ NineVerse/
 
 ## 📖 Documentation
 
+> _Documentation is currently in progress – some details may be missing._
 ### Core Concepts
 - [Routing System](https://github.com/Appsventory/NineVerse/blob/main/docs/router.md)
 - [Models & Database](https://github.com/Appsventory/NineVerse/blob/main/docs/database.md)
-
-### Advanced Topics
-- [Middleware](https://github.com/Appsventory/NineVerse/blob/main/docs/middleware.md)
 - [Nixs Template Engine](https://github.com/Appsventory/NineVerse/blob/main/docs/nixs.md)
-- [CLI Commands](https://github.com/Appsventory/NineVerse/blob/main/docs/cli.md)
+- [CLI Commands](https://github.com/Appsventory/NineVerse/blob/main/docs/fany_CLI.md)
+
 
 
 <a href="https://github.com/Appsventory/NineVerse/graphs/contributors">
