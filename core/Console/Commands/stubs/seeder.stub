@@ -1,0 +1,26 @@
+<?php
+
+namespace App\Database\Seeders;
+
+use Core\Foundation\Seeding\Seeder;
+use Core\Foundation\Database\DB;
+
+class {{SeederClass}} extends Seeder
+{
+    /**
+     * Run the database seeds.
+     */
+    public function run()
+    {
+        // Method 1: Insert single record
+        DB::table('{{TableName}}')->insert([
+            'name' => 'Sample Name',
+            'email' => 'sample@example.com',
+            'created_at' => date('Y-m-d H:i:s'),
+            'updated_at' => date('Y-m-d H:i:s'),
+        ]);
+
+        echo "✅ {{SeederClass}} completed\n";
+    }
+}
+        

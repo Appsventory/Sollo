@@ -1,0 +1,53 @@
+<?php
+
+namespace App\Models;
+
+use Core\Foundation\ORM\Model;
+
+class {{ModelClass}} extends Model
+{
+    /**
+     * The table associated with the model.
+     */
+    protected $table = '{{TableName}}';
+
+    /**
+     * The attributes that are mass assignable.
+     */
+    protected $fillable = [
+        // Add your fillable attributes here
+    ];
+
+    /**
+     * The attributes that should be hidden for serialization.
+     */
+    protected $hidden = [
+        // Add attributes to hide (e.g., passwords)
+    ];
+
+    /**
+     * The attributes that should be cast.
+     */
+    protected $casts = [
+        // Add your attribute casts here
+        // 'created_at' => 'datetime',
+        // 'updated_at' => 'datetime',
+    ];
+
+    /**
+     * Define relationships here
+     */
+    
+    // Example: One-to-Many relationship
+    // public function posts()
+    // {
+    //     return $this->hasMany(Post::class);
+    // }
+    
+    // Example: Belongs-to relationship
+    // public function user()
+    // {
+    //     return $this->belongsTo(User::class);
+    // }
+}
+        

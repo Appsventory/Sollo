@@ -1,0 +1,52 @@
+<?php
+
+namespace App\Controllers;
+
+use Core\Foundation\Controller;
+use Core\Foundation\Http\Session;
+use Core\Foundation\Http\CsrfToken;
+{{UseModel}}
+
+class {{ControllerClass}} extends Controller
+{
+    public function index()
+    {
+        return $this->view('{{ModelVariable}}.index');
+    }
+
+    public function create()
+    {
+        return $this->view('{{ModelVariable}}.create');
+    }
+
+    public function store()
+    {
+        CsrfToken::validate();
+        Session::flash('success', '{{ModelClass}} created successfully!');
+        return $this->redirect('/{{ModelVariable}}');
+    }
+
+    public function show($id)
+    {
+        return $this->view('{{ModelVariable}}.show', compact('id'));
+    }
+
+    public function edit($id)
+    {
+        return $this->view('{{ModelVariable}}.edit', compact('id'));
+    }
+
+    public function update($id)
+    {
+        CsrfToken::validate();
+        Session::flash('success', '{{ModelClass}} updated successfully!');
+        return $this->redirect('/{{ModelVariable}}');
+    }
+
+    public function destroy($id)
+    {
+        CsrfToken::validate();
+        Session::flash('success', '{{ModelClass}} deleted successfully!');
+        return $this->redirect('/{{ModelVariable}}');
+    }
+}

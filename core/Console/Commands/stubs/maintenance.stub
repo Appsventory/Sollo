@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="id" class="scroll-smooth">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Maintenance • Perusahaan Anda</title>
+    <meta name="robots" content="noindex, nofollow" />
+
+    <!-- Tailwind -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Google Font -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=swap" rel="stylesheet" />
+    <style>
+        body {
+            font-family: "Inter", sans-serif;
+        }
+    </style>
+</head>
+
+<body class="bg-[#161d2f] text-slate-100">
+
+    <!-- Container -->
+    <main class="min-h-screen flex items-center justify-center px-6">
+
+        <!-- Card -->
+        <div
+            class="w-full max-w-2xl bg-gray-900 bg-opacity-50 rounded-2xl border border-slate-700/50 p-8 md:p-12 text-center">
+
+            <!-- Animated Icon -->
+            <div class="mb-8 inline-flex p-4 bg-slate-800/60 rounded-full">
+                <svg class="w-16 h-16 text-[#dc143c] animate-pulse" fill="none" stroke="currentColor"
+                    stroke-width="1.5" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round"
+                        d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+                </svg>
+            </div>
+
+            <!-- Headline -->
+            <h1
+                class="text-3xl md:text-5xl font-black tracking-tight text-[#dc143c] mb-3">
+                Oops… the server is taking a little nap
+            </h1>
+
+            <!-- Sub -->
+            <p class="text-slate-300 md:text-lg mb-8">
+                But don’t worry, we’ll wake it up right at <span class="font-semibold text-white">08:00 PM</span>. 
+                In the meantime, take a deep breath and relax!
+            </p>
+
+            <!-- Progress -->
+            <div class="w-full bg-slate-700 rounded-full h-2.5 mb-6">
+                <div class="bg-gradient-to-r from-red-900 to-red-600 h-2.5 rounded-full animate-pulse"
+                    style="width:65%"></div>
+            </div>
+
+            <!-- CTA -->
+            <div class="flex flex-col sm:flex-row items-center justify-center gap-4">
+                <button onclick="location.reload()"
+                    class="w-full sm:w-auto px-6 py-3 rounded-lg font-semibold bg-white text-slate-900 hover:bg-slate-100 transition">
+                    Reload the magic
+                </button>
+                <a href="mailto:support@perusahaan.com"
+                    class="w-full sm:w-auto px-6 py-3 rounded-lg font-semibold bg-slate-800 text-slate-100 hover:bg-slate-700 border border-slate-600 transition">
+                    Chat with us
+                </a>
+            </div>
+
+            <!-- Social -->
+            <div class="mt-10 flex justify-center gap-5">
+                <a href="https://twitter.com/perusahaan" target="_blank" rel="noopener"
+                    class="text-slate-400 hover:text-white transition">
+                    <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                        <path
+                            d="M22.46 6c-.77.35-1.6.58-2.46.67.88-.53 1.56-1.37 1.88-2.38-.83.5-1.75.85-2.72 1.05C18.37 4.5 17.26 4 16 4c-2.35 0-4.27 1.92-4.27 4.29 0 .34.04.67.11.98-3.56-.18-6.73-1.89-8.84-4.48-.37.63-.58 1.37-.58 2.15 0 1.49.75 2.81 1.91 3.56-.71 0-1.37-.22-1.95-.55v.05c0 2.08 1.48 3.82 3.44 4.21a4.22 4.22 0 0 1-1.94.07 4.28 4.28 0 0 0 4 2.98 8.52 8.52 0 0 1-5.33 1.84c-.34 0-.68-.02-1.02-.06C3.44 20.29 5.7 21 8.12 21c7.34 0 11.35-6.08 11.35-11.35 0-.17 0-.34-.01-.51.78-.57 1.45-1.28 1.99-2.09z" />
+                    </svg>
+                </a>
+                <a href="https://instagram.com/perusahaan" target="_blank" rel="noopener"
+                    class="text-slate-400 hover:text-white transition">
+                    <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                        <path
+                            d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.85s-.011 3.584-.069 4.85c-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07s-3.584-.012-4.85-.07c-3.252-.148-4.771-1.691-4.919-4.919-.058-1.265-.069-1.645-.069-4.85s.011-3.584.069-4.85c.149-3.225 1.664-4.771 4.919-4.919C8.416 2.175 8.796 2.163 12 2.163zm0 1.802C9.042 3.965 8.71 3.977 7.437 4.038c-2.4 1.133-3.433 3.39-3.433 5.962 0 2.572 1.033 4.829 3.433 5.962 1.273.061 1.605.073 4.563.073s3.29-.012 4.563-.073c2.4-1.133 3.433-3.39 3.433-5.962 0-2.572-1.033-4.829-3.433-5.962C15.29 3.977 14.958 3.965 12 3.965zm0 2.868a3.967 3.967 0 100 7.934 3.967 3.967 0 000-7.934zm0 6.468a2.501 2.501 0 110-5.002 2.501 2.501 0 010 5.002zm6.406-6.81a1.2 1.2 0 100-2.4 1.2 1.2 0 000 2.4z" />
+                    </svg>
+                </a>
+            </div>
+
+        </div>
+    </main>
+
+    <!-- Countdown (opsional) -->
+    <script>
+        // Hitung mundur otomatis ke 20:00 hari ini
+        const target = new Date();
+        target.setHours(20, 0, 0, 0);
+        if (target < new Date()) target.setDate(target.getDate() + 1);
+
+        function updateTimer() {
+            const now = new Date();
+            const sec = Math.max(0, Math.floor((target - now) / 1000));
+            const h = String(Math.floor(sec / 3600)).padStart(2, "0");
+            const m = String(Math.floor((sec % 3600) / 60)).padStart(2, "0");
+            const s = String(sec % 60).padStart(2, "0");
+            document.getElementById("countdown").textContent = `${h}:${m}:${s}`;
+        }
+        setInterval(updateTimer, 1000);
+        updateTimer();
+    </script>
+
+    <!-- Tulis durasi tepat di bawah teks perkiraan selesai -->
+    <p class="absolute bottom-6 left-0 right-0 text-center text-sm text-slate-400">
+        Perkiraan tersisa <span id="countdown" class="font-semibold text-white">--:--:--</span>
+    </p>
+
+</body>
+
+</html>
+            
