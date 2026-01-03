@@ -51,16 +51,8 @@ class DirectiveCompiler
             $content = substr_replace($content, '', $offset, strlen($fullMatch));
         }
 
-        // @yield('name') or @yield('name', 'default')
-        $content = preg_replace_callback(
-            '/@yield\s*\(\s*[\'"]([^\'"]+)[\'"]\s*(?:,\s*[\'"]([^\'"]*)[\'"])?\s*\)/',
-            function ($matches) use ($sections) {
-                $name = $matches[1];
-                $default = $matches[2] ?? '';
-                return $sections[$name] ?? $default;
-            },
-            $content
-        );
+        // Do NOT handle @yield here - handle it later after all other compilations
+        // to ensure default values are properly compiled
 
         return $content;
     }
@@ -264,28 +256,295 @@ class DirectiveCompiler
     }
 
     /**
-     * Compile @include directives
+     * Compile @include directives - supports both static and dynamic template names
+     * Static: @include('docs.3.x.intro')
+     * Dynamic: @include('docs.3.x.' . $page)
      */
     public static function compileIncludes($content)
     {
-        return preg_replace_callback(
-            '/@include\s*\(\s*[\'"]([^\'"]+)[\'"]\s*(?:,\s*(.+?))?\s*\)/',
-            function ($matches) {
-                $template = $matches[1];
-                $variables = isset($matches[2]) ? $matches[2] : '[]';
+        // Pattern to match @include with parentheses - handles both static and dynamic paths
+        // Capture everything inside parentheses, then manually parse it
+        $pattern = '/@include\s*\(\s*(.+?)\s*(?:,\s*(.+?))?\s*\)(?=[;\s\n]|$)/';
 
+        return preg_replace_callback($pattern, function ($matches) {
+            $pathExpr = trim($matches[1]);
+            $variables = isset($matches[2]) ? trim($matches[2]) : '[]';
+
+            // Check if path is a literal string (starts with quote)
+            if (preg_match('/^[\'"]([^\'"]+)[\'"]$/', $pathExpr, $stringMatch)) {
+                // Static path - compile at compile time
+                $template = $stringMatch[1];
                 $path = PathResolver::resolve($template);
 
                 if (!file_exists($path)) {
                     return "<!-- Include not found: {$template} -->";
                 }
 
-                return "<?php \$__compiledPath = '" . addslashes($path) . "'; " .
-                    "\$__data = array_merge(get_defined_vars(), {$variables}); " .
-                    "extract(\$__data); " .
-                    "include \$__compiledPath; ?>";
+                // Load and compile the partial content inline
+                $partialContent = file_get_contents($path);
+
+                // Compile the partial content through the full pipeline
+                $compiled = \Core\Framework\Velo\Nixs\NixsCompiler::compileContent($partialContent);
+
+                // Output the compiled partial directly with access to parent variables
+                return "<?php " .
+                    "\$__variables = {$variables}; " .
+                    "extract(array_merge(get_defined_vars(), \$__variables)); " .
+                    "?>" . $compiled . "<?php ?>";
+            } else {
+                // Dynamic path - compile at runtime using a helper function
+                return "<?php " .
+                    "\\Core\\Framework\\Velo\\Nixs\\NixsCompiler::includePartial({$pathExpr}, {$variables}); " .
+                    "?>";
+            }
+        }, $content);
+    }
+
+    /**
+     * Compile @yield directives with compiled default values
+     */
+    public static function compileYield($sections, $content)
+    {
+        // Parse manually to properly handle parentheses in default values
+        $output = '';
+        $pos = 0;
+
+        while (preg_match('/@yield\s*\(/', $content, $matches, PREG_OFFSET_CAPTURE, $pos)) {
+            $yieldStart = $matches[0][1];
+            $output .= substr($content, $pos, $yieldStart - $pos);
+
+            // Find matching closing paren
+            $parenCount = 1;
+            $currentPos = $yieldStart + strlen($matches[0][0]);
+
+            while ($currentPos < strlen($content) && $parenCount > 0) {
+                if ($content[$currentPos] === '(') {
+                    $parenCount++;
+                } elseif ($content[$currentPos] === ')') {
+                    $parenCount--;
+                }
+                $currentPos++;
+            }
+
+            // Extract yield args
+            $yieldArgs = substr($content, $yieldStart + strlen($matches[0][0]), $currentPos - $yieldStart - strlen($matches[0][0]) - 1);
+
+            // Parse name and default
+            $parts = self::parseYieldArgs($yieldArgs);
+            $name = $parts['name'];
+            $default = $parts['default'] ?? '';
+
+            // Output: use section if exists, else compile and output default
+            $output .= "@yield('" . $name . "'";
+            if ($default) {
+                // Compile the default value
+                $compiled = self::compileDefaultValueContent($default);
+                $output .= ", '" . addslashes($compiled) . "'";
+            }
+            $output .= ")";
+
+            $pos = $currentPos;
+        }
+
+        $output .= substr($content, $pos);
+
+        // Now actually replace @yield with section content or compiled default
+        return preg_replace_callback(
+            '/@yield\s*\(\s*[\'"]([^\'"]+)[\'"]\s*(?:,\s*[\'"]([^\'"]*)[\'"])?\s*\)/',
+            function ($m) use ($sections) {
+                $name = $m[1];
+                $default = $m[2] ?? '';
+
+                if (isset($sections[$name])) {
+                    return $sections[$name];
+                }
+                return $default;
+            },
+            $output
+        );
+    }
+
+    /**
+     * Parse @yield arguments
+     */
+    private static function parseYieldArgs($args)
+    {
+        $args = trim($args);
+
+        // Find first comma at top level
+        $inSingle = false;
+        $inDouble = false;
+        $parenDepth = 0;
+        $commaPos = -1;
+
+        for ($i = 0; $i < strlen($args); $i++) {
+            $char = $args[$i];
+
+            if ($char === "'" && !$inDouble && ($i === 0 || $args[$i - 1] !== '\\')) {
+                $inSingle = !$inSingle;
+            } elseif ($char === '"' && !$inSingle && ($i === 0 || $args[$i - 1] !== '\\')) {
+                $inDouble = !$inDouble;
+            } elseif (!$inSingle && !$inDouble) {
+                if ($char === '(') $parenDepth++;
+                elseif ($char === ')') $parenDepth--;
+                elseif ($char === ',' && $parenDepth === 0) {
+                    $commaPos = $i;
+                    break;
+                }
+            }
+        }
+
+        if ($commaPos === -1) {
+            // Only name
+            $name = trim($args);
+            $name = preg_replace('/^[\'"]|[\'"]$/', '', $name);
+            return ['name' => $name];
+        } else {
+            // Name and default
+            $name = trim(substr($args, 0, $commaPos));
+            $name = preg_replace('/^[\'"]|[\'"]$/', '', $name);
+            $default = trim(substr($args, $commaPos + 1));
+            $default = preg_replace('/^[\'"]|[\'"]$/', '', $default);
+            return ['name' => $name, 'default' => $default];
+        }
+    }
+
+    /**
+     * Pre-compile @yield default values so they go through the compilation pipeline
+     */
+    public static function precompileYieldDefaults($content)
+    {
+        // Parse @yield directives manually to handle complex default values
+        $output = '';
+        $pos = 0;
+
+        while (preg_match('/@yield\s*\(/', $content, $matches, PREG_OFFSET_CAPTURE, $pos)) {
+            $yieldStart = $matches[0][1];
+
+            // Copy everything before @yield
+            $output .= substr($content, $pos, $yieldStart - $pos);
+
+            // Find the matching closing parenthesis
+            $parenPos = $yieldStart + strlen($matches[0][0]) - 1; // Position after 'yield('
+            $parenCount = 1;
+            $currentPos = $parenPos + 1;
+
+            while ($currentPos < strlen($content) && $parenCount > 0) {
+                if ($content[$currentPos] === '(') {
+                    $parenCount++;
+                } elseif ($content[$currentPos] === ')') {
+                    $parenCount--;
+                }
+                $currentPos++;
+            }
+
+            // Extract the yield arguments
+            $yieldContent = substr($content, $parenPos + 1, $currentPos - $parenPos - 2);
+
+            // Parse the arguments: first arg is section name, second (if exists) is default
+            $parts = self::parseYieldArguments($yieldContent);
+            $output .= "@yield('" . $parts['name'] . "'";
+
+            if (isset($parts['default'])) {
+                // Compile the default value
+                $compiledDefault = self::compileDefaultValueContent($parts['default']);
+                $output .= ", '" . addslashes($compiledDefault) . "'";
+            }
+
+            $output .= ")";
+            $pos = $currentPos;
+        }
+
+        // Append remaining content
+        $output .= substr($content, $pos);
+
+        return $output;
+    }
+
+    /**
+     * Parse @yield arguments to extract name and default value
+     */
+    private static function parseYieldArguments($yieldContent)
+    {
+        // Find first comma at top level (not inside quotes or parens)
+        $inSingleQuote = false;
+        $inDoubleQuote = false;
+        $parenDepth = 0;
+        $firstCommaPos = -1;
+
+        for ($i = 0; $i < strlen($yieldContent); $i++) {
+            $char = $yieldContent[$i];
+
+            if (!$inSingleQuote && !$inDoubleQuote) {
+                if ($char === "'") {
+                    $inSingleQuote = true;
+                } elseif ($char === '"') {
+                    $inDoubleQuote = true;
+                } elseif ($char === '(') {
+                    $parenDepth++;
+                } elseif ($char === ')') {
+                    $parenDepth--;
+                } elseif ($char === ',' && $parenDepth === 0) {
+                    $firstCommaPos = $i;
+                    break;
+                }
+            } elseif ($inSingleQuote && $char === "'") {
+                $inSingleQuote = false;
+            } elseif ($inDoubleQuote && $char === '"') {
+                $inDoubleQuote = false;
+            }
+        }
+
+        $result = ['name' => '', 'default' => null];
+
+        if ($firstCommaPos === -1) {
+            // Only name, no default
+            $nameWithQuotes = trim($yieldContent);
+            $result['name'] = self::removeQuotes($nameWithQuotes);
+        } else {
+            // Both name and default
+            $nameWithQuotes = trim(substr($yieldContent, 0, $firstCommaPos));
+            $defaultWithQuotes = trim(substr($yieldContent, $firstCommaPos + 1));
+
+            $result['name'] = self::removeQuotes($nameWithQuotes);
+            $result['default'] = self::removeQuotes($defaultWithQuotes);
+        }
+
+        return $result;
+    }
+
+    /**
+     * Remove quotes from string
+     */
+    private static function removeQuotes($str)
+    {
+        $str = trim($str);
+        if ((substr($str, 0, 1) === "'" && substr($str, -1) === "'") ||
+            (substr($str, 0, 1) === '"' && substr($str, -1) === '"')
+        ) {
+            return substr($str, 1, -1);
+        }
+        return $str;
+    }
+
+    /**
+     * Compile just the directives within default values (@env, etc)
+     * This converts @env('KEY') or @env(KEY) to actual value at compile time
+     */
+    private static function compileDefaultValueContent($content)
+    {
+        // @env('KEY') or @env(KEY) - compile to actual env value at compile time
+        $content = preg_replace_callback(
+            '/@env\s*\(\s*[\'"]?([^\'")\s]+)[\'"]?\s*\)/',
+            function ($m) {
+                $key = $m[1];
+                // Get the actual env value NOW
+                $value = \Core\Support\Env::env($key, $key);
+                return $value;
             },
             $content
         );
+
+        return $content;
     }
 }

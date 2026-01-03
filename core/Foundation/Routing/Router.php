@@ -255,10 +255,17 @@ class Router
             $pattern = self::buildRoutePattern($routeUri);
 
             if (preg_match($pattern, $uri, $matches)) {
-                array_shift($matches);
+                // Filter to keep only named groups (string keys)
+                $namedMatches = [];
+                foreach ($matches as $key => $value) {
+                    if (is_string($key)) {
+                        $namedMatches[$key] = $value;
+                    }
+                }
+
                 return [
                     'route' => $routeEntry,
-                    'parameters' => $matches
+                    'parameters' => $namedMatches
                 ];
             }
         }
@@ -274,10 +281,10 @@ class Router
         }, $routeUri);
 
         // 2. Handle optional parameters {parameter?}
-        $pattern = preg_replace('/\/\{([^\/\}]+)\?\}/', '(?:/(?P<$1>[^\/]+))?', $pattern);
+        $pattern = preg_replace('/\/\{([^\/\}]+)\?\}/', '(?:/(?P<\1>[^\/]+))?', $pattern);
 
         // 3. Handle normal parameters {parameter} TERAKHIR
-        $pattern = preg_replace('/\{([^\/\}]+)\}/', '(?P<$1>[^\/]+)', $pattern);
+        $pattern = preg_replace('/\{([^\/\}]+)\}/', '(?P<\1>[^\/]+)', $pattern);
 
         return "#^" . $pattern . "$#";
     }
@@ -426,22 +433,22 @@ class Router
 
         // Get method reflection to check for Request parameter and build params accordingly
         $reflection = new \ReflectionMethod($controllerInstance, $methodName);
-        $params = array_values($parameters);
         $finalParams = [];
-        $paramIndex = 0;
 
         // Build parameters based on method signature
         foreach ($reflection->getParameters() as $param) {
+            $paramName = $param->getName();
             $type = $param->getType();
+
             if ($type && $type->getName() === 'Core\Foundation\Http\Request') {
                 // Inject Request object
                 $finalParams[] = new \Core\Foundation\Http\Request();
+            } elseif (isset($parameters[$paramName])) {
+                // Use the parameter from route if it exists
+                $finalParams[] = $parameters[$paramName];
             } else {
-                // Use the next route parameter
-                if ($paramIndex < count($params)) {
-                    $finalParams[] = $params[$paramIndex];
-                    $paramIndex++;
-                }
+                // Parameter not provided - pass null so PHP uses default value
+                $finalParams[] = null;
             }
         }
 

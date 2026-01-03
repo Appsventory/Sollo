@@ -61,11 +61,14 @@
         </header>
 
         <!-- Main Content -->
+        @php
+            $parts = explode('ll', $data['NAME']);
+        @endphp
         <main class="flex-1 flex flex-col justify-center px-6 py-12">
             <!-- Hero Section -->
             <div class="text-center max-w-4xl mx-auto mb-20">
                 <h2 class="text-5xl md:text-6xl font-bold text-white mb-4">
-                    Welcome to <span class="brand-text">{{ $data["NAME"] }}</span>
+                    Welcome to <span class="brand-text">{{ $parts[0] }}<span class="text-white">ll</span>{{ $parts[1] }}</span>
                 </h2>
                 <p class="text-xl text-gray-300 mb-2">A lightweight PHP MVC framework</p>
                 <p class="text-gray-400 mb-8">Version {{ $data["VERSION"] }} ({{ $data["CODENAME"] }})</p>

@@ -117,20 +117,24 @@ class NixsCompiler
     }
 
     /**
-     * Compile template content
+     * Compile template content (public method for use in @include)
      */
-    protected static function compile($content)
+    public static function compileContent($content)
     {
         // 1. Apply plugins first
         $content = self::applyPlugins($content);
 
-        // 2. Handle layout directives (@extends, @section, @yield)
+        // 2. Handle layout directives (@extends, @section - but NOT @yield yet)
         $content = DirectiveCompiler::handleLayoutDirectives(
             self::$sections,
             self::$layout,
             $content,
             self::$layoutData
         );
+
+        // 2.5 COMPILE @yield DEFAULT VALUES EARLY (before HelperCompiler)
+        // This ensures @env() in defaults are compiled to actual values, not PHP code
+        $content = DirectiveCompiler::compileYield(self::$sections, $content);
 
         // 3. Compile form helpers (@csrf, @method) BEFORE expressions
         // This must happen before expressions so {{ }} inside form tags don't break the regex
@@ -142,7 +146,7 @@ class NixsCompiler
         // 5. Compile control structures (@if, @foreach, etc.)
         $content = DirectiveCompiler::compileControlStructures($content);
 
-        // 6. Compile helper function calls (session() -> $session(), etc.)
+        // 6. Compile helper function calls (session() -> $session(), @env() directives, etc.)
         $content = HelperCompiler::compile($content);
 
         // 7. Compile includes (@include)
@@ -152,6 +156,14 @@ class NixsCompiler
         $content = AssetCompiler::compile($content);
 
         return $content;
+    }
+
+    /**
+     * Compile template content (protected method for internal use)
+     */
+    protected static function compile($content)
+    {
+        return self::compileContent($content);
     }
 
     /**
@@ -223,6 +235,71 @@ class NixsCompiler
             return ob_get_clean();
         } catch (\Exception $e) {
             return self::fallbackError($error, $e);
+        }
+    }
+
+    /**
+     * Include a partial template dynamically (for dynamic @include paths)
+     */
+    public static function includePartial($templatePath, $variables = [])
+    {
+        try {
+            // Resolve the template path
+            $path = PathResolver::resolve($templatePath);
+
+            if (!file_exists($path)) {
+                echo "<!-- Include not found: {$templatePath} (resolved to: {$path}) -->";
+                return;
+            }
+
+            // Merge with global data and helper functions
+            $mergedVariables = array_merge(self::$globalData, $variables);
+
+            // Add global helper functions if not already present
+            if (!isset($mergedVariables['session'])) {
+                $mergedVariables['session'] = function ($key = null, $default = null) {
+                    return \Core\Foundation\Http\Session::get($key, $default);
+                };
+            }
+
+            if (!isset($mergedVariables['env'])) {
+                $mergedVariables['env'] = function ($key, $default = null) {
+                    return \Core\Support\Env::env($key, $default);
+                };
+            }
+
+            if (!isset($mergedVariables['auth'])) {
+                $mergedVariables['auth'] = function () {
+                    return \Core\Foundation\Http\Session::get('user');
+                };
+            }
+
+            // Extract variables into current scope
+            extract($mergedVariables, EXTR_SKIP);
+
+            // Load and compile the partial content
+            $partialContent = file_get_contents($path);
+            $compiled = self::compileContent($partialContent);
+
+            // Create a temporary file to include
+            $tempPath = sys_get_temp_dir() . '/nixs_' . md5($path . microtime()) . '.php';
+
+            // Write the compiled content as-is (it's already processed PHP and HTML mixed)
+            if (!file_put_contents($tempPath, $compiled)) {
+                echo "<!-- Error writing compiled partial to temp file -->";
+                return;
+            }
+
+            // Include the compiled partial with output buffering to capture any output
+            ob_start();
+            include $tempPath;
+            $output = ob_get_clean();
+            echo $output;
+
+            // Clean up temp file
+            @unlink($tempPath);
+        } catch (\Throwable $e) {
+            echo "<!-- Error including partial '{$templatePath}': " . htmlspecialchars($e->getMessage()) . " -->";
         }
     }
 
