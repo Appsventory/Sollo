@@ -139,7 +139,7 @@ class KernelConsole
         echo "  \e[36mmake:view <n>\e[0m                                Create a new view (.nixs.php)\n";
         echo "  \e[36mmake:component <n>\e[0m                           Create a new component\n";
         echo "  \e[36mmake:middleware <n>\e[0m                          Create a new middleware class\n";
-        echo "  \e[36mmake:route <n> [flags]\e[0m                       Append route(s) to routes/web.php\n";
+        echo "  \e[36mmake:route <n> [flags] [--api]\e[0m                Append route(s) to app/Routes/web.php or app/Routes/api.php\n";
         echo "  \e[36mmake:migration <n> [--table=<n>]\e[0m             Create a new migration\n";
         echo "  \e[36mmake:seeder <n>\e[0m                              Create a new seeder\n";
         echo "  \e[36mmake:config <n>\e[0m                              Create a new config file\n";
@@ -171,6 +171,7 @@ class KernelConsole
         echo "       \e[2m--D          Add DELETE route → destroy()\e[0m\n";
         echo "       \e[2m--RESOURCE   Add all CRUD routes\e[0m\n";
         echo "       \e[2m--M=Name     Attach middleware\e[0m\n";
+        echo "       \e[2m--api        Use or create app/Routes/api.php\e[0m\n";
 
         echo "\n\e[1;32m🆘 HELP COMMANDS:\e[0m\n";
         echo "  \e[36mhelp, --help, -h\e[0m                             Show this help menu\n";

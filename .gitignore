@@ -1,5 +1,9 @@
 storage/*
 vendor/
+node_modules/
+package-lock.json
+package.json
+postcss.config.mjs
 .env
 .DS_Store
 ress

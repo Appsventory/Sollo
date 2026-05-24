@@ -25,6 +25,10 @@ class MakeRoute extends BaseCommand
         $route = strtolower($name);
         $controller = ucfirst($name) . 'Controller';
         $middleware = '';
+        $useApiFile = in_array('--api', $options, true);
+
+        // Remove --api from options so it does not interfere with route generation.
+        $options = array_values(array_filter($options, fn($opt) => $opt !== '--api'));
 
         // Handle middleware
         foreach ($options as $opt) {
@@ -58,6 +62,11 @@ class MakeRoute extends BaseCommand
         }
 
         if (empty($lines)) {
+            if ($route === 'api' || $useApiFile) {
+                $this->ensureRouteFileExists($useApiFile ? 'api' : 'api');
+                return;
+            }
+
             $this->warning("No method specified (--G, --P, --U, --D, --RESOURCE). Nothing was added.");
             $this->info("Available options:");
             $this->info("  --G         GET route (index)");
@@ -66,10 +75,11 @@ class MakeRoute extends BaseCommand
             $this->info("  --D         DELETE route (destroy)");
             $this->info("  --RESOURCE  All CRUD routes");
             $this->info("  --M=Name    Add middleware");
+            $this->info("  --api       Use or create app/Routes/api.php");
             return;
         }
 
-        $this->appendToRouteFile($lines);
+        $this->appendToRouteFile($lines, $useApiFile);
     }
 
     protected function createResourceRoutes($route, $controller, $middleware, &$lines)
@@ -84,13 +94,12 @@ class MakeRoute extends BaseCommand
         $lines[] = "Router::delete('/$route/{id}', '$controller@destroy')$middleware;";
     }
 
-    protected function appendToRouteFile($lines)
+    protected function appendToRouteFile($lines, $useApiFile = false)
     {
-        $routeFile = 'app/routes/web.php';
+        $routeFile = $this->getRouteFilePath($useApiFile);
 
         if (!file_exists($routeFile)) {
-            $this->ensureDirectoryExists($routeFile);
-            file_put_contents($routeFile, "<?php\n\n// Web Routes\n");
+            $this->ensureRouteFileExists($useApiFile ? 'api' : 'web');
         }
 
         $output = "\n// Generated routes - " . date('Y-m-d H:i:s') . "\n";
@@ -104,5 +113,46 @@ class MakeRoute extends BaseCommand
                 echo "  \e[36m$line\e[0m\n";
             }
         }
+    }
+
+    protected function ensureRouteFileExists($type = 'web')
+    {
+        $routeFile = $this->getRouteFilePath($type === 'api');
+
+        if (!file_exists($routeFile)) {
+            $this->ensureDirectoryExists($routeFile);
+
+            $content = "<?php\n\n";
+
+            if ($type === 'api') {
+                $content .= "use Core\Foundation\Routing\Router;\n\n";
+                $content .= "/*\n";
+                $content .= "|--------------------------------------------------------------------------\n";
+                $content .= "| API Routes\n";
+                $content .= "|--------------------------------------------------------------------------\n";
+                $content .= "|\n";
+                $content .= "| Here is where you can register API routes for your application.\n";
+                $content .= "|\n";
+                $content .= "*/\n\n";
+                $content .= "// Health check\n";
+                $content .= "Router::get('/health', function () {\n";
+                $content .= "    return ['status' => 'ok', 'message' => 'API is running'];\n";
+                $content .= "});\n";
+            } else {
+                $content .= "// " . strtoupper($type) . " Routes\n";
+            }
+
+            file_put_contents($routeFile, $content);
+            $this->success("Created route file: {$routeFile}");
+            return true;
+        }
+
+        $this->info("Route file already exists: {$routeFile}");
+        return false;
+    }
+
+    protected function getRouteFilePath($useApiFile = false)
+    {
+        return $useApiFile ? 'app/Routes/api.php' : 'app/Routes/web.php';
     }
 }

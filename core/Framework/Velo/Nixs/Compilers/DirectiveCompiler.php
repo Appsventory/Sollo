@@ -23,14 +23,8 @@ class DirectiveCompiler
                 // Capture layout data if provided
                 if (!empty($matches[2])) {
                     $dataString = $matches[2];
-                    // Evaluate the array - we need to safely parse it
-                    // Use eval in a safe way by checking the string format
-                    try {
-                        $layoutData = eval('return ' . $dataString . ';');
-                        if (!is_array($layoutData)) {
-                            $layoutData = [];
-                        }
-                    } catch (\Exception $e) {
+                    $layoutData = self::parseArrayString($dataString);
+                    if (!is_array($layoutData)) {
                         $layoutData = [];
                     }
                 }
@@ -55,6 +49,126 @@ class DirectiveCompiler
         // to ensure default values are properly compiled
 
         return $content;
+    }
+
+    /**
+     * Parse a simple array string used by @extends layout data.
+     */
+    protected static function parseArrayString(string $string): array
+    {
+        $result = [];
+        $string = trim($string);
+
+        if (!str_starts_with($string, '[') || !str_ends_with($string, ']')) {
+            return $result;
+        }
+
+        $inner = trim(substr($string, 1, -1));
+        if ($inner === '') {
+            return $result;
+        }
+
+        $pairs = self::splitTopLevel($inner, ',', 0);
+
+        foreach ($pairs as $pair) {
+            if (strpos($pair, '=>') === false) {
+                continue;
+            }
+
+            [$keyPart, $valuePart] = self::splitTopLevel($pair, '=>', 2);
+            if (!isset($valuePart)) {
+                continue;
+            }
+
+            $key = self::unquote(trim($keyPart));
+            $value = self::parseScalarValue(trim($valuePart));
+
+            if ($key !== '') {
+                $result[$key] = $value;
+            }
+        }
+
+        return $result;
+    }
+
+    protected static function splitTopLevel(string $string, string $delimiter, int $limit = 0): array
+    {
+        $parts = [];
+        $buffer = '';
+        $depth = 0;
+        $inSingle = false;
+        $inDouble = false;
+        $len = strlen($string);
+        $dlen = strlen($delimiter);
+
+        for ($i = 0; $i < $len; $i++) {
+            $char = $string[$i];
+
+            if ($char === "'" && !$inDouble && ($i === 0 || $string[$i - 1] !== '\\')) {
+                $inSingle = !$inSingle;
+            } elseif ($char === '"' && !$inSingle && ($i === 0 || $string[$i - 1] !== '\\')) {
+                $inDouble = !$inDouble;
+            }
+
+            if (!$inSingle && !$inDouble) {
+                if ($char === '[' || $char === '(' || $char === '{') {
+                    $depth++;
+                } elseif ($char === ']' || $char === ')' || $char === '}') {
+                    $depth = max(0, $depth - 1);
+                }
+
+                if ($depth === 0 && $dlen > 0 && substr($string, $i, $dlen) === $delimiter) {
+                    $parts[] = $buffer;
+                    $buffer = '';
+                    $i += $dlen - 1;
+                    continue;
+                }
+
+                if ($depth === 0 && $delimiter === ',' && $char === ',') {
+                    $parts[] = $buffer;
+                    $buffer = '';
+                    continue;
+                }
+            }
+
+            $buffer .= $char;
+        }
+
+        if ($buffer !== '' || $string === '') {
+            $parts[] = $buffer;
+        }
+
+        return $parts;
+    }
+
+    protected static function parseScalarValue(string $value)
+    {
+        if (strcasecmp($value, 'true') === 0) {
+            return true;
+        }
+
+        if (strcasecmp($value, 'false') === 0) {
+            return false;
+        }
+
+        if (strcasecmp($value, 'null') === 0) {
+            return null;
+        }
+
+        if (is_numeric($value)) {
+            return $value + 0;
+        }
+
+        return self::unquote($value);
+    }
+
+    protected static function unquote(string $value): string
+    {
+        if ((str_starts_with($value, "'") && str_ends_with($value, "'")) || (str_starts_with($value, '"') && str_ends_with($value, '"'))) {
+            return stripslashes(substr($value, 1, -1));
+        }
+
+        return $value;
     }
 
     /**
@@ -262,42 +376,95 @@ class DirectiveCompiler
      */
     public static function compileIncludes($content)
     {
-        // Pattern to match @include with parentheses - handles both static and dynamic paths
-        // Capture everything inside parentheses, then manually parse it
-        $pattern = '/@include\s*\(\s*(.+?)\s*(?:,\s*(.+?))?\s*\)(?=[;\s\n]|$)/';
+        $output = '';
+        $pos = 0;
+        $length = strlen($content);
 
-        return preg_replace_callback($pattern, function ($matches) {
-            $pathExpr = trim($matches[1]);
-            $variables = isset($matches[2]) ? trim($matches[2]) : '[]';
+        while (preg_match('/@include\s*\(/', $content, $matches, PREG_OFFSET_CAPTURE, $pos)) {
+            $start = $matches[0][1];
+            $output .= substr($content, $pos, $start - $pos);
+            $current = $start + strlen($matches[0][0]);
+            $parenCount = 1;
+            $inSingle = false;
+            $inDouble = false;
+            $escape = false;
 
-            // Check if path is a literal string (starts with quote)
-            if (preg_match('/^[\'"]([^\'"]+)[\'"]$/', $pathExpr, $stringMatch)) {
-                // Static path - compile at compile time
+            while ($current < $length && $parenCount > 0) {
+                $char = $content[$current];
+
+                if ($escape) {
+                    $escape = false;
+                } elseif ($char === '\\') {
+                    $escape = true;
+                } elseif ($char === "'" && !$inDouble) {
+                    $inSingle = !$inSingle;
+                } elseif ($char === '"' && !$inSingle) {
+                    $inDouble = !$inDouble;
+                } elseif (!$inSingle && !$inDouble) {
+                    if ($char === '(') {
+                        $parenCount++;
+                    } elseif ($char === ')') {
+                        $parenCount--;
+                    }
+                }
+
+                $current++;
+            }
+
+            if ($parenCount !== 0) {
+                $output .= substr($content, $start, $current - $start);
+                $pos = $current;
+                continue;
+            }
+
+            $args = substr($content, $start + strlen($matches[0][0]), $current - $start - strlen($matches[0][0]) - 1);
+            [$pathExpr, $variables] = self::parseIncludeArguments($args);
+
+            // The rest of processing is handled below
+            $pathExprValue = $pathExpr;
+            $variablesValue = $variables;
+
+            if (preg_match('/^[\'\"]([^\'\"]+)[\'\"]$/', $pathExprValue, $stringMatch)) {
                 $template = $stringMatch[1];
                 $path = PathResolver::resolve($template);
 
                 if (!file_exists($path)) {
-                    return "<!-- Include not found: {$template} -->";
+                    $output .= "<!-- Include not found: {$template} -->";
+                    $pos = $current;
+                    continue;
                 }
 
-                // Load and compile the partial content inline
                 $partialContent = file_get_contents($path);
-
-                // Compile the partial content through the full pipeline
                 $compiled = \Core\Framework\Velo\Nixs\NixsCompiler::compileContent($partialContent);
 
-                // Output the compiled partial directly with access to parent variables
-                return "<?php " .
-                    "\$__variables = {$variables}; " .
+                $output .= "<?php " .
+                    "\$__variables = {$variablesValue}; " .
                     "extract(array_merge(get_defined_vars(), \$__variables)); " .
                     "?>" . $compiled . "<?php ?>";
             } else {
-                // Dynamic path - compile at runtime using a helper function
-                return "<?php " .
-                    "\\Core\\Framework\\Velo\\Nixs\\NixsCompiler::includePartial({$pathExpr}, {$variables}); " .
+                $output .= "<?php " .
+                    "\\Core\\Framework\\Velo\\Nixs\\NixsCompiler::includePartial({$pathExprValue}, {$variablesValue}); " .
                     "?>";
             }
-        }, $content);
+
+            $pos = $current;
+        }
+
+        $output .= substr($content, $pos);
+        return $output;
+    }
+
+    private static function parseIncludeArguments(string $args): array
+    {
+        $parts = self::splitTopLevel($args, ',', 2);
+        $pathExpr = trim($parts[0] ?? '');
+        $variables = isset($parts[1]) ? trim($parts[1]) : '[]';
+
+        if ($variables === '') {
+            $variables = '[]';
+        }
+
+        return [$pathExpr, $variables];
     }
 
     /**

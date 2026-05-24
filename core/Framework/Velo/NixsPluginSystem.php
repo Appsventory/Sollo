@@ -56,18 +56,18 @@ class NixsPluginSystem
         $config = [];
 
         // Simple parser for nixs.conf format
-        preg_match('/Plugin\s*\[\s*(.*?)\s*\]/s', $content, $matches);
-
-        if (isset($matches[1])) {
+        if (preg_match('/Plugin\s*\[\s*(.*?)\s*\]/is', $content, $matches)) {
             $pluginString = $matches[1];
 
-            // Parse key: value pairs
-            preg_match_all('/(\w+)\s*:\s*(true|false)/i', $pluginString, $pluginMatches);
+            $entries = preg_split('/\s*,\s*/', trim($pluginString));
+            foreach ($entries as $entry) {
+                $entry = trim($entry);
+                if ($entry === '') {
+                    continue;
+                }
 
-            if (!empty($pluginMatches[1])) {
-                $config['plugins'] = [];
-                foreach ($pluginMatches[1] as $i => $pluginName) {
-                    $config['plugins'][$pluginName] = strtolower($pluginMatches[2][$i]) === 'true';
+                if (preg_match('/^(\w+)\s*:\s*(true|false)$/i', $entry, $pluginMatches)) {
+                    $config['plugins'][$pluginMatches[1]] = strcasecmp($pluginMatches[2], 'true') === 0;
                 }
             }
         }

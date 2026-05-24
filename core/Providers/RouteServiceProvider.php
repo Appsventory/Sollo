@@ -28,11 +28,17 @@ class RouteServiceProvider
      */
     protected function apiRoutes()
     {
+        $apiRoutesPath = $this->basePath('app/Routes/api.php');
+
+        if (! file_exists($apiRoutesPath)) {
+            return;
+        }
+
         Router::group([
             'prefix' => 'api',
             'middleware' => ['api']
-        ], function () {
-            require $this->basePath('app/Routes/api.php');
+        ], function () use ($apiRoutesPath) {
+            require $apiRoutesPath;
         });
     }
 

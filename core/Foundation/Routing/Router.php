@@ -506,6 +506,11 @@ class Router
         return $baseUrl . $path;
     }
 
+    public static function hasNamedRoute($name)
+    {
+        return isset(self::$namedRoutes[$name]);
+    }
+
     // Global middleware
     public static function middleware($middleware)
     {

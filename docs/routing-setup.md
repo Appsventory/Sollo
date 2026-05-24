@@ -159,7 +159,7 @@ Router::get('/posts/{slug}/comments/{id}', 'PostController@getComment');
 ```php
 Router::get('/search/{query?}', 'SearchController@index');
 // URL: /search → query=null
-// URL: /search/laravel → query=laravel
+// URL: /search/sollo → query=sollo
 ```
 
 ### Parameter Constraints
