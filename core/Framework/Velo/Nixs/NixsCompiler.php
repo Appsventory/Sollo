@@ -18,6 +18,7 @@ class NixsCompiler
     protected static $layoutData = [];
     protected static $globalData = [];
     protected static $pluginSystemInitialized = false;
+    protected static $maskedCodeBlocks = [];
 
     /**
      * Render a template with data
@@ -116,11 +117,30 @@ class NixsCompiler
         return $tempPath;
     }
 
+    protected static function maskCodeBlocks($content)
+    {
+        self::$maskedCodeBlocks = [];
+
+        return preg_replace_callback('/<pre.*?>.*?<code.*?>.*?<\/code>.*?<\/pre>/si', function ($matches) {
+            $key = '__MASKED_CODE_BLOCK_' . count(self::$maskedCodeBlocks) . '__';
+            self::$maskedCodeBlocks[$key] = $matches[0];
+            return $key;
+        }, $content);
+    }
+
+    protected static function restoreCodeBlocks($content)
+    {
+        return str_replace(array_keys(self::$maskedCodeBlocks), array_values(self::$maskedCodeBlocks), $content);
+    }
+
     /**
      * Compile template content (public method for use in @include)
      */
     public static function compileContent($content)
     {
+        // Mask code blocks so directives inside examples do not get processed
+        $content = self::maskCodeBlocks($content);
+
         // 1. Apply plugins first
         $content = self::applyPlugins($content);
 
@@ -154,6 +174,9 @@ class NixsCompiler
 
         // 8. Compile asset/URL helpers (@asset, @url, @route)
         $content = AssetCompiler::compile($content);
+
+        // Restore masked code blocks after all directive compilation
+        $content = self::restoreCodeBlocks($content);
 
         return $content;
     }
