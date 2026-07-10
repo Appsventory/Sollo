@@ -468,6 +468,135 @@ class DirectiveCompiler
     }
 
     /**
+     * Compile @nixscard('name', [...]) ... @endnixscard blocks.
+     *
+     * The body is captured as raw text so template examples inside cards are not
+     * compiled by the parent template.
+     */
+    public static function compileNixsCards($content)
+    {
+        $output = '';
+        $pos = 0;
+        $length = strlen($content);
+
+        while (preg_match('/(?<!@)@nixscard\s*\(/', $content, $matches, PREG_OFFSET_CAPTURE, $pos)) {
+            $start = $matches[0][1];
+            $output .= substr($content, $pos, $start - $pos);
+
+            $current = $start + strlen($matches[0][0]);
+            $parenCount = 1;
+            $inSingle = false;
+            $inDouble = false;
+            $escape = false;
+
+            while ($current < $length && $parenCount > 0) {
+                $char = $content[$current];
+
+                if ($escape) {
+                    $escape = false;
+                } elseif ($char === '\\') {
+                    $escape = true;
+                } elseif ($char === "'" && !$inDouble) {
+                    $inSingle = !$inSingle;
+                } elseif ($char === '"' && !$inSingle) {
+                    $inDouble = !$inDouble;
+                } elseif (!$inSingle && !$inDouble) {
+                    if ($char === '(') {
+                        $parenCount++;
+                    } elseif ($char === ')') {
+                        $parenCount--;
+                    }
+                }
+
+                $current++;
+            }
+
+            if ($parenCount !== 0) {
+                $output .= substr($content, $start, $current - $start);
+                $pos = $current;
+                continue;
+            }
+
+            $endTag = '@endnixscard';
+            $end = self::findNixsCardEnd($content, $current);
+
+            if ($end === null) {
+                $output .= substr($content, $start, $current - $start);
+                $pos = $current;
+                continue;
+            }
+
+            $args = substr($content, $start + strlen($matches[0][0]), $current - $start - strlen($matches[0][0]) - 1);
+            [$cardName, $variables] = self::parseIncludeArguments($args);
+            $body = self::normalizeCardBody(substr($content, $current, $end - $current));
+
+            $encodedBody = base64_encode($body);
+
+            $output .= "<?php " .
+                "\\Core\\Framework\\Velo\\Nixs\\NixsCompiler::includeCard({$cardName}, {$variables}, base64_decode('{$encodedBody}')); " .
+                "?>";
+
+            $pos = $end + strlen($endTag);
+        }
+
+        $output .= substr($content, $pos);
+        return $output;
+    }
+
+    private static function findNixsCardEnd(string $content, int $offset): ?int
+    {
+        $depth = 1;
+        $pos = $offset;
+
+        while ($pos < strlen($content)) {
+            $nextOpen = self::strposDirective($content, '@nixscard', $pos);
+            $nextClose = self::strposDirective($content, '@endnixscard', $pos);
+
+            if ($nextClose === false) {
+                return null;
+            }
+
+            if ($nextOpen !== false && $nextOpen < $nextClose) {
+                $depth++;
+                $pos = $nextOpen + strlen('@nixscard');
+                continue;
+            }
+
+            $depth--;
+            if ($depth === 0) {
+                return $nextClose;
+            }
+
+            $pos = $nextClose + strlen('@endnixscard');
+        }
+
+        return null;
+    }
+
+    private static function strposDirective(string $content, string $directive, int $offset)
+    {
+        $pos = $offset;
+
+        while (($found = strpos($content, $directive, $pos)) !== false) {
+            if ($found === 0 || $content[$found - 1] !== '@') {
+                return $found;
+            }
+
+            $pos = $found + strlen($directive);
+        }
+
+        return false;
+    }
+
+    private static function normalizeCardBody(string $body): string
+    {
+        $body = preg_replace('/^\r?\n/', '', $body);
+        $body = preg_replace('/\r?\n[ \t]*$/', '', $body);
+
+        return $body;
+    }
+
+    /**
      * Compile @yield directives with compiled default values
      */
     public static function compileYield($sections, $content)

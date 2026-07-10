@@ -122,6 +122,14 @@ class NixsCompiler
         self::$maskedCodeBlocks = [];
 
         return preg_replace_callback('/<pre.*?>.*?<code.*?>.*?<\/code>.*?<\/pre>/si', function ($matches) {
+            $block = $matches[0];
+
+            // Keep code blocks that contain template expressions so card partials and
+            // similar reusable components can still compile their own placeholders.
+            if (preg_match('/\{\{\s*.*?\}\}|\{!\!\s*.*?!!\}/s', $block)) {
+                return $block;
+            }
+
             $key = '__MASKED_CODE_BLOCK_' . count(self::$maskedCodeBlocks) . '__';
             self::$maskedCodeBlocks[$key] = $matches[0];
             return $key;
@@ -144,7 +152,10 @@ class NixsCompiler
         // 1. Apply plugins first
         $content = self::applyPlugins($content);
 
-        // 2. Handle layout directives (@extends, @section - but NOT @yield yet)
+        // 2. Compile reusable card blocks before any directives inside card bodies
+        $content = DirectiveCompiler::compileNixsCards($content);
+
+        // 3. Handle layout directives (@extends, @section - but NOT @yield yet)
         $content = DirectiveCompiler::handleLayoutDirectives(
             self::$sections,
             self::$layout,
@@ -152,27 +163,30 @@ class NixsCompiler
             self::$layoutData
         );
 
-        // 2.5 COMPILE @yield DEFAULT VALUES EARLY (before HelperCompiler)
+        // 3.5 COMPILE @yield DEFAULT VALUES EARLY (before HelperCompiler)
         // This ensures @env() in defaults are compiled to actual values, not PHP code
         $content = DirectiveCompiler::compileYield(self::$sections, $content);
 
-        // 3. Compile form helpers (@csrf, @method) BEFORE expressions
+        // 3. Compile custom cards first so body content is passed through safely
+        $content = DirectiveCompiler::compileNixsCards($content);
+
+        // 4. Compile form helpers (@csrf, @method) BEFORE expressions
         // This must happen before expressions so {{ }} inside form tags don't break the regex
         $content = FormCompiler::compile($content);
 
-        // 4. Compile expressions ({{ $var }}, {!! $var !!})
+        // 5. Compile expressions ({{ $var }}, {!! $var !!})
         $content = ExpressionCompiler::compile($content);
 
-        // 5. Compile control structures (@if, @foreach, etc.)
+        // 6. Compile control structures (@if, @foreach, etc.)
         $content = DirectiveCompiler::compileControlStructures($content);
 
-        // 6. Compile helper function calls (session() -> $session(), @env() directives, etc.)
+        // 7. Compile helper function calls (session() -> $session(), @env() directives, etc.)
         $content = HelperCompiler::compile($content);
 
-        // 7. Compile includes (@include)
+        // 8. Compile includes (@include)
         $content = DirectiveCompiler::compileIncludes($content);
 
-        // 8. Compile asset/URL helpers (@asset, @url, @route)
+        // 9. Compile asset/URL helpers (@asset, @url, @route)
         $content = AssetCompiler::compile($content);
 
         // Restore masked code blocks after all directive compilation
@@ -187,6 +201,17 @@ class NixsCompiler
     protected static function compile($content)
     {
         return self::compileContent($content);
+    }
+
+    /**
+     * Render a card template from resources/Views/card using custom data.
+     */
+    public static function renderCard($name, $data = [])
+    {
+        $template = 'card.' . ltrim($name, '.');
+        ob_start();
+        self::render($template, $data);
+        return ob_get_clean();
     }
 
     /**
@@ -324,6 +349,18 @@ class NixsCompiler
         } catch (\Throwable $e) {
             echo "<!-- Error including partial '{$templatePath}': " . htmlspecialchars($e->getMessage()) . " -->";
         }
+    }
+
+    /**
+     * Include a reusable card from resources/Views/card.
+     */
+    public static function includeCard($cardName, $variables = [], $body = '')
+    {
+        $cardName = trim((string) $cardName, "/\\ \t\n\r\0\x0B");
+        $templatePath = 'card.' . str_replace(['/', '\\'], '.', $cardName);
+        $variables = array_merge($variables, ['body' => $body]);
+
+        self::includePartial($templatePath, $variables);
     }
 
     /**
