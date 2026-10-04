@@ -22,7 +22,7 @@ class MakeSeeder extends BaseCommand
     protected function createSeeder($name)
     {
         $className = $this->formatClassName($name);
-        $path = "app/database/seeders/{$className}.php";
+        $path = "app/Database/Seeders/{$className}.php";
 
         if (file_exists($path)) {
             $this->warning("Seeder {$className} already exists.");
@@ -80,7 +80,7 @@ class MakeSeeder extends BaseCommand
      */
     protected function registerSeederInDatabase($seederClassName)
     {
-        $databaseSeederPath = 'app/Database/seeders/DatabaseSeeder.php';
+        $databaseSeederPath = 'app/Database/Seeders/DatabaseSeeder.php';
 
         if (!file_exists($databaseSeederPath)) {
             $this->warning("DatabaseSeeder.php not found. Please register manually.");

@@ -9,7 +9,6 @@ use Core\Framework\Velo\Nixs\Compilers\FormCompiler;
 use Core\Framework\Velo\Nixs\Compilers\AssetCompiler;
 use Core\Framework\Velo\Nixs\Compilers\HelperCompiler;
 use Core\Framework\Velo\Nixs\Support\TemplateCache;
-use Core\Framework\Velo\NixsPluginSystem;
 
 class NixsCompiler
 {
@@ -17,7 +16,6 @@ class NixsCompiler
     protected static $layout = '';
     protected static $layoutData = [];
     protected static $globalData = [];
-    protected static $pluginSystemInitialized = false;
     protected static $maskedCodeBlocks = [];
 
     /**
@@ -25,12 +23,6 @@ class NixsCompiler
      */
     public static function render($template, $data = [])
     {
-        // Initialize plugin system once
-        if (!self::$pluginSystemInitialized) {
-            NixsPluginSystem::init();
-            self::$pluginSystemInitialized = true;
-        }
-
         $path = PathResolver::resolve($template);
 
         if (!file_exists($path)) {
@@ -149,13 +141,16 @@ class NixsCompiler
         // Mask code blocks so directives inside examples do not get processed
         $content = self::maskCodeBlocks($content);
 
-        // 1. Apply plugins first
+        // 1. Apply plugins (no-op currently)
         $content = self::applyPlugins($content);
 
-        // 2. Compile reusable card blocks before any directives inside card bodies
-        $content = DirectiveCompiler::compileNixsCards($content);
+        // 2. Strip template comments early so they never reach expression/control compilers
+        $content = DirectiveCompiler::compileComments($content);
 
-        // 3. Handle layout directives (@extends, @section - but NOT @yield yet)
+        // 3. Compile @nixscomponent blocks (body/slot captured raw)
+        $content = DirectiveCompiler::compileNixsComponents($content);
+
+        // 4. Layout directives (@extends, @section — not @yield yet)
         $content = DirectiveCompiler::handleLayoutDirectives(
             self::$sections,
             self::$layout,
@@ -163,30 +158,25 @@ class NixsCompiler
             self::$layoutData
         );
 
-        // 3.5 COMPILE @yield DEFAULT VALUES EARLY (before HelperCompiler)
-        // This ensures @env() in defaults are compiled to actual values, not PHP code
+        // 5. Compile @yield (so defaults can still contain @env etc.)
         $content = DirectiveCompiler::compileYield(self::$sections, $content);
 
-        // 3. Compile custom cards first so body content is passed through safely
-        $content = DirectiveCompiler::compileNixsCards($content);
-
-        // 4. Compile form helpers (@csrf, @method) BEFORE expressions
-        // This must happen before expressions so {{ }} inside form tags don't break the regex
+        // 6. Form helpers (@csrf, @method) before expressions
         $content = FormCompiler::compile($content);
 
-        // 5. Compile expressions ({{ $var }}, {!! $var !!})
+        // 7. Expressions ({{ $var }}, {!! $var !!})
         $content = ExpressionCompiler::compile($content);
 
-        // 6. Compile control structures (@if, @foreach, etc.)
+        // 8. Control structures (@if, @foreach/@empty, @php, @default, …)
         $content = DirectiveCompiler::compileControlStructures($content);
 
-        // 7. Compile helper function calls (session() -> $session(), @env() directives, etc.)
+        // 9. Helpers (@env, @session, @auth, bare env()/session())
         $content = HelperCompiler::compile($content);
 
-        // 8. Compile includes (@include)
+        // 10. Includes (@include)
         $content = DirectiveCompiler::compileIncludes($content);
 
-        // 9. Compile asset/URL helpers (@asset, @url, @route)
+        // 11. Asset / URL helpers (@asset, @url, @route)
         $content = AssetCompiler::compile($content);
 
         // Restore masked code blocks after all directive compilation
@@ -204,27 +194,67 @@ class NixsCompiler
     }
 
     /**
-     * Render a card template from resources/Views/card using custom data.
+     * Resolve component template key.
+     * Prefers resources/Views/components/{name}, falls back to resources/Views/card/{name}.
      */
-    public static function renderCard($name, $data = [])
+    public static function resolveComponentTemplate(string $name): string
     {
-        $template = 'card.' . ltrim($name, '.');
-        ob_start();
-        self::render($template, $data);
-        return ob_get_clean();
+        $name = str_replace(['/', '\\'], '.', trim($name, "/\\ \t\n\r\0\x0B."));
+        $name = preg_replace('/^(components|card)\./', '', $name) ?? $name;
+
+        $candidates = [
+            'components.' . $name,
+            'card.' . $name,
+        ];
+
+        foreach ($candidates as $template) {
+            $path = PathResolver::resolve($template);
+            if (file_exists($path)) {
+                return $template;
+            }
+        }
+
+        // Default target (error message will show this path)
+        return 'components.' . $name;
     }
 
     /**
-     * Apply all enabled plugins
+     * Render a reusable component (returns HTML string).
+     *
+     * Looks in resources/Views/components/ then resources/Views/card/.
+     * Optional $data['body'] / $data['slot'] for slot content (used by @nixscomponent).
+     *
+     * Example:
+     *   echo Nixs::component('Button', ['text' => 'Save']);
+     *   {!! Nixs::component('Alert', ['type' => 'warn', 'body' => 'Hi']) !!}
+     */
+    public static function component(string $name, array $data = []): string
+    {
+        $template = self::resolveComponentTemplate($name);
+
+        // Normalize slot aliases
+        if (isset($data['body']) && !isset($data['slot'])) {
+            $data['slot'] = $data['body'];
+        } elseif (isset($data['slot']) && !isset($data['body'])) {
+            $data['body'] = $data['slot'];
+        }
+
+        ob_start();
+        try {
+            self::render($template, $data);
+            return (string) ob_get_clean();
+        } catch (\Throwable $e) {
+            ob_end_clean();
+            return '<!-- Component not found or error: ' . htmlspecialchars($name . ' — ' . $e->getMessage()) . ' -->';
+        }
+    }
+
+
+    /**
+     * Apply plugins (no-op; plugin system removed as unused)
      */
     protected static function applyPlugins($content)
     {
-        $directives = NixsPluginSystem::getDirectives();
-
-        foreach ($directives as $name => $callback) {
-            $content = call_user_func($callback, $content);
-        }
-
         return $content;
     }
 
@@ -352,16 +382,17 @@ class NixsCompiler
     }
 
     /**
-     * Include a reusable card from resources/Views/card.
+     * Echo a component with optional body/slot (used by compiled @nixscomponent).
      */
-    public static function includeCard($cardName, $variables = [], $body = '')
+    public static function includeComponent($name, $variables = [], $body = '')
     {
-        $cardName = trim((string) $cardName, "/\\ \t\n\r\0\x0B");
-        $templatePath = 'card.' . str_replace(['/', '\\'], '.', $cardName);
-        $variables = array_merge($variables, ['body' => $body]);
-
-        self::includePartial($templatePath, $variables);
+        $variables = array_merge((array) $variables, [
+            'body' => $body,
+            'slot' => $body,
+        ]);
+        echo self::component((string) $name, $variables);
     }
+
 
     /**
      * Fallback error display

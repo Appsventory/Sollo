@@ -1,6 +1,6 @@
 # 🚀 FANY CLI Documentation
 
-**FANY CLI Console v2.0** - Powerful command-line interface for Sollo Framework
+**FANY CLI Console v3.1.0** - Powerful command-line interface for Sollo Framework
 
 ---
 
@@ -35,7 +35,7 @@ php fany --version
 Expected output:
 ```
 🚀 FANY CLI Console
-Version 2.0.0
+Version 3.1.0
 PHP 8.3.x
 ```
 

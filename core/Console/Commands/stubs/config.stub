@@ -1,0 +1,12 @@
+<?php
+
+/**
+ * {{ConfigName}} configuration
+ */
+return [
+    'default' => env('{{CONFIG_NAME}}_DEFAULT', 'local'),
+
+    'options' => [
+        'timeout' => env('{{CONFIG_NAME}}_TIMEOUT', 60),
+    ],
+];

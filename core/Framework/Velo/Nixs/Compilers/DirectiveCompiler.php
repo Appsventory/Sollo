@@ -10,6 +10,18 @@ use Core\Framework\Velo\Nixs\Support\PathResolver;
 class DirectiveCompiler
 {
     /**
+     * Strip template comments before any other compilation.
+     * Supports: {{-- --}}, @** **@, [[ + + ]]
+     */
+    public static function compileComments(string $content): string
+    {
+        $content = preg_replace('/\{\{\-\-.*?\-\-\}\}/s', '', $content);
+        $content = preg_replace('/@\*\*.*?\*\*@/s', '', $content);
+        $content = preg_replace('/\[\[\s*\+.*?\+\s*\]\]/s', '', $content);
+        return $content;
+    }
+
+    /**
      * Compile layout directives: @extends, @section, @yield
      */
     public static function handleLayoutDirectives(&$sections, &$layout, $content, &$layoutData = null)
@@ -176,132 +188,79 @@ class DirectiveCompiler
      */
     public static function compileControlStructures($content)
     {
-        // Use simple regex with proper paren handling
-        // The trick is to make the capture group flexible
+        // 1. Handle @foreach ... @empty ... @endforeach FIRST (before plain @foreach conversion)
+        $content = self::compileSmartForeach($content);
 
-        // @if(condition)
+        // 2. Plain control structures (line-oriented, condition must end the line)
         $content = preg_replace_callback(
             '/@if\s*\((.+?)\)\s*$/m',
-            function ($m) {
-                return '<?php if (' . $m[1] . '): ?>';
-            },
+            fn($m) => '<?php if (' . $m[1] . '): ?>',
             $content
         );
 
-        // @elseif(condition)  
         $content = preg_replace_callback(
             '/@elseif\s*\((.+?)\)\s*$/m',
-            function ($m) {
-                return '<?php elseif (' . $m[1] . '): ?>';
-            },
+            fn($m) => '<?php elseif (' . $m[1] . '): ?>',
             $content
         );
 
-        // @unless(condition)
         $content = preg_replace_callback(
             '/@unless\s*\((.+?)\)\s*$/m',
-            function ($m) {
-                return '<?php if (!(' . $m[1] . ')): ?>';
-            },
+            fn($m) => '<?php if (!(' . $m[1] . ')): ?>',
             $content
         );
 
-        // @foreach(expr)
+        // Remaining plain @foreach (no @empty)
         $content = preg_replace_callback(
             '/@foreach\s*\((.+?)\)\s*$/m',
-            function ($m) {
-                return '<?php foreach (' . $m[1] . '): ?>';
-            },
+            fn($m) => '<?php foreach (' . $m[1] . '): ?>',
             $content
         );
 
-        // @for(condition)
         $content = preg_replace_callback(
             '/@for\s*\((.+?)\)\s*$/m',
-            function ($m) {
-                return '<?php for (' . $m[1] . '): ?>';
-            },
+            fn($m) => '<?php for (' . $m[1] . '): ?>',
             $content
         );
 
-        // @while(condition)
         $content = preg_replace_callback(
             '/@while\s*\((.+?)\)\s*$/m',
-            function ($m) {
-                return '<?php while (' . $m[1] . '): ?>';
-            },
+            fn($m) => '<?php while (' . $m[1] . '): ?>',
             $content
         );
 
-        // @switch(condition)
         $content = preg_replace_callback(
             '/@switch\s*\((.+?)\)\s*$/m',
-            function ($m) {
-                return '<?php switch (' . $m[1] . '): ?>';
-            },
+            fn($m) => '<?php switch (' . $m[1] . '): ?>',
             $content
         );
 
-        // @case(value)
         $content = preg_replace_callback(
             '/@case\s*\((.+?)\)\s*$/m',
-            function ($m) {
-                return '<?php case ' . $m[1] . ': ?>';
-            },
+            fn($m) => '<?php case ' . $m[1] . ': ?>',
             $content
         );
 
-        // @php(code)
-        /*$content = preg_replace_callback(
-            '/@php\s*\((.+?)\)\s*$/m',
-            function ($m) {
-                return '<?php ' . $m[1] . ' ?>';
-            },
-            $content
-        );*/
-
-        // @php ... @endphp
+        // @php ... @endphp — simple, same scope as the template include
         $content = preg_replace_callback(
             '/@php\s*(.*?)\s*@endphp/s',
             function ($m) {
                 $code = trim($m[1]);
-
-                if (empty($code)) return '';
-
-                return "<?php\n"
-                    . "extract(\$GLOBALS['__nixs_vars'] ?? [], EXTR_SKIP);\n"
-                    . $code . "\n"
-                    . "\$GLOBALS['__nixs_vars'] = get_defined_vars();\n"
-                    . "?>";
+                return $code === '' ? '' : "<?php\n{$code}\n?>";
             },
             $content
         );
 
-        // @env('KEY')
-        $content = preg_replace_callback(
-            '/@env\s*\(\s*[\'"]([^\'"]+)[\'"]\s*\)/',
-            function ($m) {
-                $key = $m[1];
-                return "<?php echo env('{$key}'); ?>";
-            },
-            $content
-        );
-
-        // @continue(condition)
+        // @continue / @break with condition
         $content = preg_replace_callback(
             '/@continue\s*\((.+?)\)\s*$/m',
-            function ($m) {
-                return '<?php if (' . $m[1] . ') continue; ?>';
-            },
+            fn($m) => '<?php if (' . $m[1] . ') continue; ?>',
             $content
         );
 
-        // @break(condition)
         $content = preg_replace_callback(
             '/@break\s*\((.+?)\)\s*$/m',
-            function ($m) {
-                return '<?php if (' . $m[1] . ') break; ?>';
-            },
+            fn($m) => '<?php if (' . $m[1] . ') break; ?>',
             $content
         );
 
@@ -314,58 +273,50 @@ class DirectiveCompiler
             '/@endfor/' => '<?php endfor; ?>',
             '/@endwhile/' => '<?php endwhile; ?>',
             '/@endswitch/' => '<?php endswitch; ?>',
-            '/@break/' => '<?php break; ?>',
-            '/@continue/' => '<?php continue; ?>',
-            '/@\*\*(.*?)\*\*@/s' => '<?php /* $1 */ ?>',
-            '/\[\[\s*\+(.*?)\+\s*\]\]/s' => '<?php /* $1 */ ?>',
-            '/\{\{\-\-(.*?)\-\-\}\}/s' => '<?php /* $1 */ ?>',
+            '/@default\b/' => '<?php default: ?>',
+            '/@break\b/' => '<?php break; ?>',
+            '/@continue\b/' => '<?php continue; ?>',
         ];
 
         foreach ($directives as $pattern => $replacement) {
             $content = preg_replace($pattern, $replacement, $content);
         }
 
-        // Handle smart @foreach with @empty (now that @foreach is already compiled)
-        $content = self::compileSmartForeach($content);
-
         return $content;
     }
 
     /**
-     * Compile directives with balanced parentheses
-     */
-    protected static function compileBalancedDirective($content, $directive, $template)
-    {
-        // This method is deprecated
-        return $content;
-    }
-
-    /**
-     * Handle @foreach with optional @empty block
+     * Handle @foreach with optional @empty block.
+     * Must run BEFORE plain @foreach conversion.
      */
     protected static function compileSmartForeach($content)
     {
         $pattern = '/@foreach\s*\((.*?)\)(.*?)@endforeach/s';
 
         return preg_replace_callback($pattern, function ($matches) {
-            $expression = $matches[1];
+            $expression = trim($matches[1]);
             $body = $matches[2];
 
-            if (strpos($body, '@empty') !== false) {
-                [$foreachContent, $emptyContent] = preg_split('/@empty/', $body, 2);
-
-                // Extract variable name
-                preg_match('/^\s*(\$\w+)/', $expression, $varMatch);
-                $variable = $varMatch[1] ?? '$items';
-
-                return "<?php if (!empty({$variable})): foreach ({$expression}): ?>" .
-                    $foreachContent .
-                    "<?php endforeach; else: ?>" .
-                    $emptyContent .
-                    "<?php endif; ?>";
-            } else {
-                return "<?php foreach ({$expression}): ?>" . $body . "<?php endforeach; ?>";
+            if (strpos($body, '@empty') === false) {
+                // Leave plain foreach for the later line-oriented converter
+                return $matches[0];
             }
+
+            [$foreachContent, $emptyContent] = preg_split('/@empty/', $body, 2);
+
+            // Iterable is the left side of "as" (e.g. $items in "$items as $item")
+            $variable = '$items';
+            if (preg_match('/^\s*(.+?)\s+as\s+/i', $expression, $varMatch)) {
+                $variable = trim($varMatch[1]);
+            } elseif (preg_match('/^\s*(\$[A-Za-z_][\w\[\]]*)/', $expression, $varMatch)) {
+                $variable = $varMatch[1];
+            }
+
+            return "<?php if (!empty({$variable})): foreach ({$expression}): ?>"
+                . $foreachContent
+                . "<?php endforeach; else: ?>"
+                . $emptyContent
+                . "<?php endif; ?>";
         }, $content);
     }
 
@@ -468,18 +419,18 @@ class DirectiveCompiler
     }
 
     /**
-     * Compile @nixscard('name', [...]) ... @endnixscard blocks.
-     *
-     * The body is captured as raw text so template examples inside cards are not
-     * compiled by the parent template.
+     * Compile @nixscomponent('name', [...]) ... @endnixscomponent blocks.
+     * Body is captured raw so nested template syntax is not compiled by the parent.
      */
-    public static function compileNixsCards($content)
+    public static function compileNixsComponents($content)
     {
         $output = '';
         $pos = 0;
         $length = strlen($content);
+        $openTag = '@nixscomponent';
+        $endTag = '@endnixscomponent';
 
-        while (preg_match('/(?<!@)@nixscard\s*\(/', $content, $matches, PREG_OFFSET_CAPTURE, $pos)) {
+        while (preg_match('/(?<!@)@nixscomponent\s*\(/', $content, $matches, PREG_OFFSET_CAPTURE, $pos)) {
             $start = $matches[0][1];
             $output .= substr($content, $pos, $start - $pos);
 
@@ -517,8 +468,7 @@ class DirectiveCompiler
                 continue;
             }
 
-            $endTag = '@endnixscard';
-            $end = self::findNixsCardEnd($content, $current);
+            $end = self::findNixsComponentEnd($content, $current);
 
             if ($end === null) {
                 $output .= substr($content, $start, $current - $start);
@@ -527,14 +477,13 @@ class DirectiveCompiler
             }
 
             $args = substr($content, $start + strlen($matches[0][0]), $current - $start - strlen($matches[0][0]) - 1);
-            [$cardName, $variables] = self::parseIncludeArguments($args);
-            $body = self::normalizeCardBody(substr($content, $current, $end - $current));
-
+            [$name, $variables] = self::parseIncludeArguments($args);
+            $body = self::normalizeComponentBody(substr($content, $current, $end - $current));
             $encodedBody = base64_encode($body);
 
-            $output .= "<?php " .
-                "\\Core\\Framework\\Velo\\Nixs\\NixsCompiler::includeCard({$cardName}, {$variables}, base64_decode('{$encodedBody}')); " .
-                "?>";
+            $output .= "<?php "
+                . "\\Core\\Framework\\Velo\\Nixs\\NixsCompiler::includeComponent({$name}, {$variables}, base64_decode('{$encodedBody}')); "
+                . "?>";
 
             $pos = $end + strlen($endTag);
         }
@@ -543,14 +492,15 @@ class DirectiveCompiler
         return $output;
     }
 
-    private static function findNixsCardEnd(string $content, int $offset): ?int
+
+    private static function findNixsComponentEnd(string $content, int $offset): ?int
     {
         $depth = 1;
         $pos = $offset;
 
         while ($pos < strlen($content)) {
-            $nextOpen = self::strposDirective($content, '@nixscard', $pos);
-            $nextClose = self::strposDirective($content, '@endnixscard', $pos);
+            $nextOpen = self::strposDirective($content, '@nixscomponent', $pos);
+            $nextClose = self::strposDirective($content, '@endnixscomponent', $pos);
 
             if ($nextClose === false) {
                 return null;
@@ -558,7 +508,7 @@ class DirectiveCompiler
 
             if ($nextOpen !== false && $nextOpen < $nextClose) {
                 $depth++;
-                $pos = $nextOpen + strlen('@nixscard');
+                $pos = $nextOpen + strlen('@nixscomponent');
                 continue;
             }
 
@@ -567,7 +517,7 @@ class DirectiveCompiler
                 return $nextClose;
             }
 
-            $pos = $nextClose + strlen('@endnixscard');
+            $pos = $nextClose + strlen('@endnixscomponent');
         }
 
         return null;
@@ -581,18 +531,16 @@ class DirectiveCompiler
             if ($found === 0 || $content[$found - 1] !== '@') {
                 return $found;
             }
-
             $pos = $found + strlen($directive);
         }
 
         return false;
     }
 
-    private static function normalizeCardBody(string $body): string
+    private static function normalizeComponentBody(string $body): string
     {
         $body = preg_replace('/^\r?\n/', '', $body);
         $body = preg_replace('/\r?\n[ \t]*$/', '', $body);
-
         return $body;
     }
 
@@ -706,137 +654,14 @@ class DirectiveCompiler
     }
 
     /**
-     * Pre-compile @yield default values so they go through the compilation pipeline
-     */
-    public static function precompileYieldDefaults($content)
-    {
-        // Parse @yield directives manually to handle complex default values
-        $output = '';
-        $pos = 0;
-
-        while (preg_match('/@yield\s*\(/', $content, $matches, PREG_OFFSET_CAPTURE, $pos)) {
-            $yieldStart = $matches[0][1];
-
-            // Copy everything before @yield
-            $output .= substr($content, $pos, $yieldStart - $pos);
-
-            // Find the matching closing parenthesis
-            $parenPos = $yieldStart + strlen($matches[0][0]) - 1; // Position after 'yield('
-            $parenCount = 1;
-            $currentPos = $parenPos + 1;
-
-            while ($currentPos < strlen($content) && $parenCount > 0) {
-                if ($content[$currentPos] === '(') {
-                    $parenCount++;
-                } elseif ($content[$currentPos] === ')') {
-                    $parenCount--;
-                }
-                $currentPos++;
-            }
-
-            // Extract the yield arguments
-            $yieldContent = substr($content, $parenPos + 1, $currentPos - $parenPos - 2);
-
-            // Parse the arguments: first arg is section name, second (if exists) is default
-            $parts = self::parseYieldArguments($yieldContent);
-            $output .= "@yield('" . $parts['name'] . "'";
-
-            if (isset($parts['default'])) {
-                // Compile the default value
-                $compiledDefault = self::compileDefaultValueContent($parts['default']);
-                $output .= ", '" . addslashes($compiledDefault) . "'";
-            }
-
-            $output .= ")";
-            $pos = $currentPos;
-        }
-
-        // Append remaining content
-        $output .= substr($content, $pos);
-
-        return $output;
-    }
-
-    /**
-     * Parse @yield arguments to extract name and default value
-     */
-    private static function parseYieldArguments($yieldContent)
-    {
-        // Find first comma at top level (not inside quotes or parens)
-        $inSingleQuote = false;
-        $inDoubleQuote = false;
-        $parenDepth = 0;
-        $firstCommaPos = -1;
-
-        for ($i = 0; $i < strlen($yieldContent); $i++) {
-            $char = $yieldContent[$i];
-
-            if (!$inSingleQuote && !$inDoubleQuote) {
-                if ($char === "'") {
-                    $inSingleQuote = true;
-                } elseif ($char === '"') {
-                    $inDoubleQuote = true;
-                } elseif ($char === '(') {
-                    $parenDepth++;
-                } elseif ($char === ')') {
-                    $parenDepth--;
-                } elseif ($char === ',' && $parenDepth === 0) {
-                    $firstCommaPos = $i;
-                    break;
-                }
-            } elseif ($inSingleQuote && $char === "'") {
-                $inSingleQuote = false;
-            } elseif ($inDoubleQuote && $char === '"') {
-                $inDoubleQuote = false;
-            }
-        }
-
-        $result = ['name' => '', 'default' => null];
-
-        if ($firstCommaPos === -1) {
-            // Only name, no default
-            $nameWithQuotes = trim($yieldContent);
-            $result['name'] = self::removeQuotes($nameWithQuotes);
-        } else {
-            // Both name and default
-            $nameWithQuotes = trim(substr($yieldContent, 0, $firstCommaPos));
-            $defaultWithQuotes = trim(substr($yieldContent, $firstCommaPos + 1));
-
-            $result['name'] = self::removeQuotes($nameWithQuotes);
-            $result['default'] = self::removeQuotes($defaultWithQuotes);
-        }
-
-        return $result;
-    }
-
-    /**
-     * Remove quotes from string
-     */
-    private static function removeQuotes($str)
-    {
-        $str = trim($str);
-        if ((substr($str, 0, 1) === "'" && substr($str, -1) === "'") ||
-            (substr($str, 0, 1) === '"' && substr($str, -1) === '"')
-        ) {
-            return substr($str, 1, -1);
-        }
-        return $str;
-    }
-
-    /**
-     * Compile just the directives within default values (@env, etc)
-     * This converts @env('KEY') or @env(KEY) to actual value at compile time
+     * Compile directives inside @yield default values (@env, etc.)
      */
     private static function compileDefaultValueContent($content)
     {
-        // @env('KEY') or @env(KEY) - compile to actual env value at compile time
         $content = preg_replace_callback(
             '/@env\s*\(\s*[\'"]?([^\'")\s]+)[\'"]?\s*\)/',
             function ($m) {
-                $key = $m[1];
-                // Get the actual env value NOW
-                $value = \Core\Support\Env::env($key, $key);
-                return $value;
+                return \Core\Support\Env::env($m[1], $m[1]);
             },
             $content
         );
@@ -844,3 +669,4 @@ class DirectiveCompiler
         return $content;
     }
 }
+

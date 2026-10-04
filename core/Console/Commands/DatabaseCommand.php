@@ -6,8 +6,8 @@ use Core\Console\Commands\BaseCommand;
 
 class DatabaseCommand extends BaseCommand
 {
-    protected $migrationsPath = 'app/database/migrations';
-    protected $seedersPath = 'app/database/seeders';
+    protected $migrationsPath = 'app/Database/migrations';
+    protected $seedersPath = 'app/Database/Seeders';
     protected $migrationTable = 'migrations';
 
     public function handle(array $argv)

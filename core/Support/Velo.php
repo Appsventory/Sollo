@@ -19,3 +19,13 @@ function jump(bool $condition, string $url): void
         exit;
     }
 }
+
+/**
+ * Render a Nixs view (global helper)
+ */
+if (!function_exists('view')) {
+    function view(string $template, array $data = []): void
+    {
+        \Core\Framework\Velo\Nixs\NixsCompiler::render($template, $data);
+    }
+}

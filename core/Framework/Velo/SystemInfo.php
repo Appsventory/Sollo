@@ -73,7 +73,7 @@ class SystemInfo
     */
 
     public const VENDOR = 'Appsventory';
-    public const PHP_REQUIRED = '8.3';
+    public const PHP_REQUIRED = '8.2';
 
 
     /*

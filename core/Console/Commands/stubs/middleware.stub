@@ -2,18 +2,22 @@
 
 namespace App\Middleware;
 
-use Core\Foundation\Http\Request;
-
+/**
+ * {{MiddlewareClass}} middleware
+ *
+ * Sollo Router calls handle() without a $next pipeline.
+ * Logic runs before the route action; the request continues after this method returns.
+ */
 class {{MiddlewareClass}}
 {
-    public function handle(Request $request, callable $next)
+    public function handle()
     {
-        // Before the request is handled
-        
-        $response = $next($request);
-        
-        // After the request is handled
-        
-        return $response;
+        // Before the route action runs
+
+        // Example:
+        // if (!\Core\Foundation\Http\Session::get('user')) {
+        //     http_response_code(401);
+        //     exit('Unauthorized');
+        // }
     }
 }

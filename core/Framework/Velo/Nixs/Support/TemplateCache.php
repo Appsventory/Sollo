@@ -7,17 +7,26 @@ namespace Core\Framework\Velo\Nixs\Support;
  */
 class TemplateCache
 {
-    protected static $cache = [];
-    protected static $enabled = true;
+    protected static array $cache = [];
+    protected static bool $enabled = true;
+    protected static ?string $cacheDir = null;
 
     public static function enable($enabled = true)
     {
-        self::$enabled = $enabled;
+        self::$enabled = (bool) $enabled;
     }
 
     public static function has($key)
     {
-        return isset(self::$cache[$key]);
+        if (!self::$enabled) {
+            return false;
+        }
+
+        if (isset(self::$cache[$key])) {
+            return is_file(self::$cache[$key]);
+        }
+
+        return false;
     }
 
     public static function get($key)
@@ -36,10 +45,15 @@ class TemplateCache
     {
         self::$cache = [];
 
-        // Also clear temp files
-        $tempDir = sys_get_temp_dir();
-        $files = glob($tempDir . '/nixs_*.php');
-        foreach ($files as $file) {
+        $dir = self::resolveCacheDir();
+        foreach (glob($dir . '/nixs_*.php') ?: [] as $file) {
+            if (is_file($file)) {
+                @unlink($file);
+            }
+        }
+
+        // Clean legacy temp-dir artifacts
+        foreach (glob(sys_get_temp_dir() . '/nixs_*.php') ?: [] as $file) {
             if (is_file($file)) {
                 @unlink($file);
             }
@@ -48,7 +62,33 @@ class TemplateCache
 
     public static function getCompiledPath($sourcePath)
     {
-        $cacheKey = md5($sourcePath . filemtime($sourcePath));
-        return sys_get_temp_dir() . '/nixs_' . $cacheKey . '.php';
+        $mtime = file_exists($sourcePath) ? filemtime($sourcePath) : 0;
+        $cacheKey = md5($sourcePath . $mtime);
+        return self::resolveCacheDir() . '/nixs_' . $cacheKey . '.php';
+    }
+
+    protected static function resolveCacheDir(): string
+    {
+        if (self::$cacheDir !== null) {
+            return self::$cacheDir;
+        }
+
+        $candidates = [
+            dirname(__DIR__, 5) . '/storage/framework/views',
+            sys_get_temp_dir(),
+        ];
+
+        foreach ($candidates as $dir) {
+            if (!is_dir($dir)) {
+                @mkdir($dir, 0755, true);
+            }
+            if (is_dir($dir) && is_writable($dir)) {
+                self::$cacheDir = $dir;
+                return self::$cacheDir;
+            }
+        }
+
+        self::$cacheDir = sys_get_temp_dir();
+        return self::$cacheDir;
     }
 }

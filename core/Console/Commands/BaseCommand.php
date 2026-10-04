@@ -243,19 +243,14 @@ class {{ModelClass}} extends Model
 
 namespace App\Middleware;
 
-use Core\Foundation\Http\Request;
-
+/**
+ * Sollo Router calls handle() without a $next pipeline.
+ */
 class {{MiddlewareClass}}
 {
-    public function handle(Request $request, callable $next)
+    public function handle()
     {
-        // Before the request is handled
-        
-        $response = $next($request);
-        
-        // After the request is handled
-        
-        return $response;
+        // Before the route action runs
     }
 }';
     }
@@ -306,6 +301,8 @@ class {{MigrationClass}} extends Migration
     protected function getSeederStubContent(): string
     {
         return '<?php
+
+namespace App\Database\Seeders;
 
 use Core\Foundation\Seeding\Seeder;
 use Core\Foundation\Database\DB;

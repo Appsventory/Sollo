@@ -13,24 +13,38 @@ class Session
     public static function start(): void
     {
         if (self::$started || session_status() === PHP_SESSION_ACTIVE) {
+            self::$started = true;
             return;
         }
 
-        // Configure session settings
-        ini_set('session.cookie_httponly', 1);
-        ini_set('session.use_only_cookies', 1);
-        ini_set('session.cookie_secure', Request::isSecure() ? 1 : 0);
-        ini_set('session.cookie_samesite', 'Lax');
+        // Cannot start session after headers are sent (e.g. CLI tests / late calls)
+        if (headers_sent()) {
+            if (session_status() !== PHP_SESSION_ACTIVE) {
+                // Use in-memory fallback so get/put still work in this request
+                if (!isset($_SESSION) || !is_array($_SESSION)) {
+                    $_SESSION = [];
+                }
+            }
+            self::$started = true;
+            if (!self::has('_token')) {
+                self::put('_token', self::generateToken());
+            }
+            self::loadFlashData();
+            return;
+        }
+
+        @ini_set('session.cookie_httponly', '1');
+        @ini_set('session.use_only_cookies', '1');
+        @ini_set('session.cookie_secure', Request::isSecure() ? '1' : '0');
+        @ini_set('session.cookie_samesite', 'Lax');
 
         session_start();
         self::$started = true;
 
-        // Initialize CSRF token if not exists
         if (!self::has('_token')) {
             self::put('_token', self::generateToken());
         }
 
-        // Load flash data
         self::loadFlashData();
     }
 

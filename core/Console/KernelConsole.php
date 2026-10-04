@@ -15,7 +15,10 @@ use Core\Console\Commands\MakeRoute;
 use Core\Console\Commands\MakeSeeder;
 use Core\Console\Commands\MakeView;
 use Core\Console\Commands\MakeComponent;
+use Core\Console\Commands\MakeConfig;
 use Core\Console\Commands\DatabaseCommand;
+use Core\Console\Commands\CacheCommand;
+use Core\Console\Commands\RouteListCommand;
 
 class KernelConsole
 {
@@ -49,6 +52,7 @@ class KernelConsole
             'make:route' => MakeRoute::class,
             'make:seeder' => MakeSeeder::class,
             'make:view' => MakeView::class,
+            'make:config' => MakeConfig::class,
 
             // Database Commands
             'db:migrate' => DatabaseCommand::class,
@@ -59,6 +63,10 @@ class KernelConsole
             'db:fresh' => DatabaseCommand::class,
             'db:backup' => DatabaseCommand::class,
 
+            // Cache & routes
+            'cache:clear' => CacheCommand::class,
+            'nixs:clear' => CacheCommand::class,
+            'route:list' => RouteListCommand::class,
         ];
     }
 
@@ -137,7 +145,7 @@ class KernelConsole
         echo "  \e[36mmake:controller <n> [--model] [--resource]\e[0m   Create a new controller\n";
         echo "  \e[36mmake:model <n>\e[0m                               Create a new model\n";
         echo "  \e[36mmake:view <n>\e[0m                                Create a new view (.nixs.php)\n";
-        echo "  \e[36mmake:component <n>\e[0m                           Create a new component\n";
+        echo "  \e[36mmake:component <n> [--props] [--slots] [--class]\e[0m  Nixs component (@nixscomponent)\n";
         echo "  \e[36mmake:middleware <n>\e[0m                          Create a new middleware class\n";
         echo "  \e[36mmake:route <n> [flags] [--api]\e[0m                Append route(s) to app/Routes/web.php or app/Routes/api.php\n";
         echo "  \e[36mmake:migration <n> [--table=<n>]\e[0m             Create a new migration\n";
@@ -157,12 +165,16 @@ class KernelConsole
         echo "  \e[36mdb:seed --list\e[0m                               List all available seeders\n";
         echo "  \e[36mdb:seed --rm=<name>\e[0m                          Remove a seeder file\n";
         echo "  \e[36mdb:reset\e[0m                                     Reset database and run migrations\n";
+        echo "  \e[36mdb:fresh\e[0m                                     Drop all tables and re-run migrations\n";
         echo "  \e[36mdb:status\e[0m                                    Show migration status\n";
         echo "  \e[36mdb:backup [--type=<t>] [--compress]\e[0m          Backup database to SQL\n";
 
         echo "\n\e[1;32m🔧 MAINTENANCE COMMANDS:\e[0m\n";
         echo "  \e[36mdown [--force]\e[0m                               Put application in maintenance mode\n";
         echo "  \e[36mup\e[0m                                           Bring application out of maintenance\n";
+        echo "  \e[36mcache:clear\e[0m                                  Clear app & Nixs view cache\n";
+        echo "  \e[36mnixs:clear\e[0m                                   Alias for cache:clear (views)\n";
+        echo "  \e[36mroute:list\e[0m                                   List all registered routes\n";
 
         echo "\n\e[1;32m📋 ROUTE OPTIONS:\e[0m\n";
         echo "       \e[2m--G          Add GET route → index()\e[0m\n";

@@ -23,14 +23,16 @@ class MakeComponent extends BaseCommand
     {
         echo "\n\e[1;33mUsage:\e[0m\n";
         echo "  \e[36mphp fany make:component <name> [options]\e[0m\n\n";
+        echo "\e[1;32mCreates:\e[0m resources/Views/components/<name>.nixs.php\n";
+        echo "\e[1;32mUse in views:\e[0m @nixscomponent('Name', [...]) ... @endnixscomponent\n\n";
         echo "\e[1;32mOptions:\e[0m\n";
-        echo "  \e[36m--props=<props>\e[0m     Component props (comma-separated)\n";
-        echo "  \e[36m--slots\e[0m             Include slot support\n";
-        echo "  \e[36m--alpine\e[0m           Include Alpine.js functionality\n";
-        echo "  \e[36m--class\e[0m            Create component class file\n\n";
+        echo "  \e[36m--props=<props>\e[0m     Props (comma-separated), e.g. text,color\n";
+        echo "  \e[36m--slots\e[0m             Extra header/footer slots\n";
+        echo "  \e[36m--alpine\e[0m            Alpine.js scaffold\n";
+        echo "  \e[36m--class\e[0m             PHP class at app/View/Components/\n\n";
         echo "\e[1;32mExamples:\e[0m\n";
-        echo "  \e[2mphp fany make:component Button --props=text,color,size\e[0m\n";
-        echo "  \e[2mphp fany make:component Card --slots --alpine\e[0m\n";
+        echo "  \e[2mphp fany make:component Button --props=text,color\e[0m\n";
+        echo "  \e[2mphp fany make:component Card --slots\e[0m\n";
         echo "  \e[2mphp fany make:component Modal --class --slots\e[0m\n";
     }
 
@@ -91,12 +93,16 @@ class MakeComponent extends BaseCommand
         // Generate Alpine.js attributes
         $alpineAttr = $HasAlpine ? ' x-data="{}" x-init="init()"' : '';
 
-        // Generate component content
+        // Always support body/slot from @nixscomponent (and optional header/footer with --slots)
         $content = $propsCode;
-
+        $content .= "<?php\n";
+        $content .= "\$body = \$body ?? (\$slot ?? '');\n";
+        $content .= "\$slot = \$slot ?? \$body;\n";
         if ($HasSlots) {
-            $content .= "<?php \$slot = \$slot ?? ''; \$header = \$header ?? ''; \$footer = \$footer ?? ''; ?>\n\n";
+            $content .= "\$header = \$header ?? '';\n";
+            $content .= "\$footer = \$footer ?? '';\n";
         }
+        $content .= "?>\n\n";
 
         $content .= "<div class=\"component-{$ComponentName}\"{$alpineAttr}>\n";
 
@@ -119,14 +125,9 @@ class MakeComponent extends BaseCommand
             }
         }
 
-        if ($HasSlots) {
-            $content .= "        <div class=\"component-content\">\n";
-            $content .= "            {!! \$slot !!}\n";
-            $content .= "        </div>\n";
-        } else {
-            $content .= "        <!-- {$ComponentName} component content -->\n";
-            $content .= "        <p>This is the {$ComponentName} component.</p>\n";
-        }
+        $content .= "        <div class=\"component-content\">\n";
+        $content .= "            {!! \$body !!}\n";
+        $content .= "        </div>\n";
 
         $content .= "    </div>\n";
 
@@ -185,7 +186,8 @@ class MakeComponent extends BaseCommand
     {
         extract($replacements);
 
-        $classPath = "resources/Views/Components/{$ComponentClass}.php";
+        // PSR-4: App\ → app/ (never under resources/)
+        $classPath = "app/View/Components/{$ComponentClass}.php";
 
         if (file_exists($classPath)) {
             $this->warning("Component class {$ComponentClass} already exists.");
@@ -202,7 +204,7 @@ class MakeComponent extends BaseCommand
             foreach ($Props as $prop) {
                 $prop = trim($prop);
                 $propsProperties .= "    public \${$prop};\n";
-                $propsParams .= "\${$prop}, ";
+                $propsParams .= "\${$prop} = null, ";
                 $propsConstructor .= "        \$this->{$prop} = \${$prop};\n";
             }
             $propsParams = rtrim($propsParams, ', ');
@@ -210,6 +212,7 @@ class MakeComponent extends BaseCommand
 
         $content = "<?php\n\n";
         $content .= "namespace App\\View\\Components;\n\n";
+        $content .= "use Core\\Framework\\Velo\\Nixs\\NixsCompiler as Nixs;\n\n";
         $content .= "class {$ComponentClass}\n";
         $content .= "{\n";
         $content .= $propsProperties;
@@ -218,7 +221,7 @@ class MakeComponent extends BaseCommand
         $content .= "    {\n";
         $content .= $propsConstructor;
         $content .= "    }\n\n";
-        $content .= "    public function render()\n";
+        $content .= "    public function render(): string\n";
         $content .= "    {\n";
         $content .= "        return Nixs::component('{$ComponentName}', [\n";
 
@@ -244,64 +247,67 @@ class MakeComponent extends BaseCommand
         echo "\n\e[1;32m📋 Component Usage Examples:\e[0m\n";
         echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n";
 
-        echo "\n\e[33m1. Using Nixs::component() method:\e[0m\n";
-        echo "   \e[36m<?php echo Nixs::component('{$name}'";
-
+        $propsExample = '';
         if (!empty($Props)) {
-            echo ", [\n";
+            $parts = [];
             foreach ($Props as $prop) {
                 $prop = trim($prop);
-                echo "       '{$prop}' => 'value',\n";
+                $parts[] = "'{$prop}' => 'value'";
             }
-            echo "   ]";
+            $propsExample = implode(', ', $parts);
         }
 
-        echo "); ?>\e[0m\n";
-
-        if ($HasSlots) {
-            echo "\n\e[33m2. With slots:\e[0m\n";
-            echo "   \e[36m<?php echo Nixs::component('{$name}', [\n";
-            echo "       'slot' => 'Main content here',\n";
-            echo "       'header' => 'Header content',\n";
-            echo "       'footer' => 'Footer content'\n";
-            echo "   ]); ?>\e[0m\n";
+        echo "\n\e[33m1. In a view — with body (@nixscomponent):\e[0m\n";
+        echo "   \e[36m@nixscomponent('{$name}'";
+        if ($propsExample !== '') {
+            echo ", [{$propsExample}]";
         }
+        echo ")\n";
+        echo "       <p>Content goes here</p>\n";
+        echo "   @endnixscomponent\e[0m\n";
+
+        echo "\n\e[33m2. From PHP — Nixs::component():\e[0m\n";
+        echo "   \e[36muse Core\\Framework\\Velo\\Nixs\\NixsCompiler as Nixs;\n";
+        echo "   echo Nixs::component('{$name}'";
+        if ($propsExample !== '') {
+            echo ", [{$propsExample}]";
+        }
+        echo ");\e[0m\n";
 
         if ($HasClass) {
-            echo "\n\e[33m3. Using component class:\e[0m\n";
-            echo "   \e[36m<?php\n";
-            echo "   \$component = new App\\View\\Components\\{$ComponentClass}(";
-
+            echo "\n\e[33m3. Component class:\e[0m\n";
+            echo "   \e[36m\$c = new App\\View\\Components\\{$ComponentClass}(";
             if (!empty($Props)) {
-                $exampleValues = [];
+                $vals = [];
                 foreach ($Props as $prop) {
-                    $prop = trim($prop);
-                    $exampleValues[] = "'example_{$prop}'";
+                    $vals[] = "'example_" . trim($prop) . "'";
                 }
-                echo implode(', ', $exampleValues);
+                echo implode(', ', $vals);
             }
-
             echo ");\n";
-            echo "   echo \$component->render();\n";
-            echo "   ?>\e[0m\n";
+            echo "   echo \$c->render();\e[0m\n";
         }
 
         if (!empty($Props)) {
-            echo "\n\e[33m4. Available props:\e[0m\n";
+            echo "\n\e[33mProps:\e[0m\n";
             foreach ($Props as $prop) {
                 $prop = trim($prop);
-                echo "   \e[36m\${$prop}\e[0m - Component {$prop} property\n";
+                echo "   \e[36m\${$prop}\e[0m\n";
             }
         }
 
+        echo "\n\e[33mSlot variables in template:\e[0m \$body / \$slot";
+        if ($HasSlots) {
+            echo " / \$header / \$footer";
+        }
+        echo "\n";
+
         if ($HasAlpine) {
-            echo "\n\e[33m5. Alpine.js integration:\e[0m\n";
-            echo "   \e[36mThe component includes Alpine.js functionality.\e[0m\n";
-            echo "   \e[36mMake sure to include Alpine.js in your layout:\e[0m\n";
+            echo "\n\e[33mAlpine.js:\e[0m include CDN in layout:\n";
             echo "   \e[2m<script defer src=\"https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js\"></script>\e[0m\n";
         }
 
-        echo "\n\e[1;32m💡 Tip:\e[0m Edit the component file to customize its appearance and behavior.\n";
+        echo "\n\e[1;32mFile:\e[0m resources/Views/components/{$name}.nixs.php\n";
         echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n";
     }
 }

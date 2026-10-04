@@ -11,26 +11,39 @@ class PathResolver
 
     public static function setBasePath($path)
     {
-        self::$basePath = $path;
+        self::$basePath = rtrim($path, '/\\');
     }
 
     public static function resolve($template)
     {
         if (!self::$basePath) {
+            // core/Framework/Velo/Nixs/Support -> project root (5 levels up)
             self::$basePath = dirname(__DIR__, 5);
+
+            // Fallback: walk up until resources/Views exists
+            if (!is_dir(self::$basePath . '/resources/Views')) {
+                $dir = __DIR__;
+                for ($i = 0; $i < 8; $i++) {
+                    $dir = dirname($dir);
+                    if (is_dir($dir . '/resources/Views')) {
+                        self::$basePath = $dir;
+                        break;
+                    }
+                }
+            }
         }
 
-        // If absolute path
-        if (str_starts_with($template, '/')) {
+        // Absolute path
+        if (str_starts_with($template, '/') || preg_match('#^[A-Za-z]:[/\\\\]#', $template)) {
             return $template;
         }
 
-        // If resources/ prefix
+        // Already prefixed with resources/
         if (str_starts_with($template, 'resources/')) {
             return self::$basePath . '/' . $template;
         }
 
-        // Convert dot notation to path
+        // Dot notation -> path
         $path = str_replace('.', '/', $template);
 
         return self::$basePath . '/resources/Views/' . $path . '.nixs.php';

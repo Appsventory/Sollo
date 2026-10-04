@@ -26,7 +26,7 @@ class MakeMigration extends BaseCommand
         $timestamp = date('Y_m_d_His');
         $fileName = "{$timestamp}_{$name}.php";
         $className = $this->formatClassName($name);
-        $path = "app/database/migrations/{$fileName}";
+        $path = "app/Database/migrations/{$fileName}";
 
         if (!$tableName) {
             $tableName = $this->extractTableName($name);
