@@ -1,0 +1,12 @@
+@extends('layouts.app')
+
+@section('title')
+{{ViewTitle}}
+@endsection
+
+@section('content')
+<div class="container">
+    <h1>{{ViewTitle}}</h1>
+    <p>Edit this view: {{FilePath}}</p>
+</div>
+@endsection

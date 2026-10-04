@@ -1,0 +1,14 @@
+<?php
+
+namespace App\Models;
+
+use Core\Foundation\ORM\Model;
+
+class {{ModelClass}} extends Model
+{
+    protected $table = '{{TableName}}';
+    // Columns that may be mass-assigned (create()/fill()). Empty = nothing is mass-assignable.
+    protected $fillable = [];
+    protected $hidden = [];
+    protected $casts = [];
+}

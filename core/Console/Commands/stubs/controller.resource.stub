@@ -1,0 +1,48 @@
+<?php
+
+namespace App\Controllers;
+
+use Core\Foundation\Controller;
+use Core\Foundation\Http\Session;
+{{UseModel}}
+
+class {{ControllerClass}} extends Controller
+{
+    public function index()
+    {
+        return $this->view('{{ViewPath}}.index');
+    }
+
+    public function create()
+    {
+        return $this->view('{{ViewPath}}.create');
+    }
+
+    public function store()
+    {
+        Session::flash('success', '{{ModelClass}} created successfully!');
+        return $this->redirect('/{{ModelVariable}}');
+    }
+
+    public function show($id)
+    {
+        return $this->view('{{ViewPath}}.show', compact('id'));
+    }
+
+    public function edit($id)
+    {
+        return $this->view('{{ViewPath}}.edit', compact('id'));
+    }
+
+    public function update($id)
+    {
+        Session::flash('success', '{{ModelClass}} updated successfully!');
+        return $this->redirect('/{{ModelVariable}}');
+    }
+
+    public function destroy($id)
+    {
+        Session::flash('success', '{{ModelClass}} deleted successfully!');
+        return $this->redirect('/{{ModelVariable}}');
+    }
+}

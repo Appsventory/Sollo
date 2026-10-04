@@ -1,0 +1,21 @@
+<?php
+
+use Core\Foundation\Database\Migration;
+use Core\Foundation\Database\Schema;
+
+class {{MigrationClass}} extends Migration
+{
+    public function up()
+    {
+        Schema::create('{{TableName}}', function ($table) {
+            $table->id();
+            // Add your columns here
+            $table->timestamps();
+        });
+    }
+
+    public function down()
+    {
+        Schema::dropIfExists('{{TableName}}');
+    }
+}

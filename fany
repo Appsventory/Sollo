@@ -1,0 +1,27 @@
+#!/usr/bin/env php
+<?php
+
+/*
+|--------------------------------------------------------------------------
+| Bootstrap (autoloader, helpers, .env)
+|--------------------------------------------------------------------------
+*/
+// Relative paths used by the commands (app/Database/..., storage/...) are resolved from the project root.
+chdir(__DIR__);
+
+require __DIR__ . '/core/bootstrap.php';
+
+/*
+|--------------------------------------------------------------------------
+| Run The Fany Console
+|--------------------------------------------------------------------------
+|
+| The exit code of the command is passed to the shell (0 = success), so
+| `php fany db:migrate && deploy` and CI pipelines behave correctly.
+|
+*/
+
+use Core\Console\KernelConsole;
+
+$kernel = new KernelConsole();
+exit($kernel->run($argv));

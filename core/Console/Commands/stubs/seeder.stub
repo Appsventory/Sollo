@@ -1,0 +1,18 @@
+<?php
+
+namespace App\Database\Seeders;
+
+use Core\Foundation\Seeding\Seeder;
+use Core\Foundation\Database\DB;
+
+class {{SeederClass}} extends Seeder
+{
+    public function run()
+    {
+        // Add your data here, for example:
+        //
+        // DB::table('{{TableName}}')->insert([
+        //     'name' => 'Example',
+        // ]);
+    }
+}

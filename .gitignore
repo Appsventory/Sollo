@@ -1,0 +1,33 @@
+# Environment
+.env
+.env.backup
+.env.bak
+
+# Dependencies
+/vendor/
+composer.lock
+
+# Database
+/database/*.sqlite
+/database/*.sqlite-journal
+/database/backups/
+
+# Storage & cache
+/storage/framework/views/*
+!/storage/framework/views/.gitkeep
+/storage/framework/sessions/*
+!/storage/framework/sessions/.gitkeep
+/storage/framework/down/
+/storage/logs/*
+!/storage/logs/.gitkeep
+/public/storage/*
+!/public/storage/.gitkeep
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+CHANGELOG.md

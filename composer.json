@@ -1,0 +1,43 @@
+{
+    "name": "appsventory/sollo",
+    "description": "Sollo - a lightweight PHP framework (skeleton template)",
+    "type": "project",
+    "license": "MIT",
+    "autoload": {
+        "psr-4": {
+            "Core\\": "core/",
+            "App\\": "app/"
+        },
+        "files": [
+            "core/Support/Velo.php"
+        ]
+    },
+    "authors": [
+        {
+            "name": "Onion"
+        }
+    ],
+    "minimum-stability": "stable",
+    "require": {
+        "php": ">=8.2",
+        "ext-pdo": "*",
+        "ext-mbstring": "*"
+    },
+    "bin": [
+        "fany"
+    ],
+    "scripts": {
+        "post-create-project-cmd": [
+            "@php -r \"file_exists('.env') || copy('.env.example', '.env');\""
+        ],
+        "test": [
+            "@php tests/run.php"
+        ],
+        "serve": [
+            "@php fany serve"
+        ]
+    },
+    "config": {
+        "sort-packages": true
+    }
+}

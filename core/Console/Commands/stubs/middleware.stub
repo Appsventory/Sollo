@@ -1,0 +1,14 @@
+<?php
+
+namespace App\Middleware;
+
+/**
+ * Sollo Router calls handle() without a $next pipeline.
+ */
+class {{MiddlewareClass}}
+{
+    public function handle()
+    {
+        // Before the route action runs
+    }
+}
