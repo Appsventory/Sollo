@@ -177,7 +177,7 @@ class ErrorHandler
     protected static function renderDetailedException(\Throwable $e)
     {
         $data = (new ErrorRenderer($e))->render();
-        $mode = Env::raw('ERROR_DISPLAY', 'inline');
+        $mode = strtolower(trim((string) Env::raw('ERROR_DISPLAY', 'inline')));
         $viewPath = dirname(__DIR__, 3) . '/resources/Views/errors/exception.nixs.php';
 
         if ($mode === 'pro') {

@@ -43,74 +43,161 @@ class DirectiveCompiler
             $content
         );
 
-        $content = preg_replace_callback(
-            '/@section\s*\(\s*[\'"]([^\'"]+)[\'"]\s*\)/',
-            fn($m) => "<?php {$ns}::startSection(" . var_export($m[1], true) . "); ?>",
-            $content
-        );
+        // Short form: @section('title', $expr)  OR  block form: @section('content')
+        $content = self::compileSectionDirectives($content, $ns);
 
         return preg_replace('/@endsection\b/', "<?php {$ns}::endSection(); ?>", $content);
     }
 
     /**
+     * Compile @section('name') blocks and @section('name', $value) short form.
+     */
+    protected static function compileSectionDirectives(string $content, string $ns): string
+    {
+        $offset = 0;
+        $length = strlen($content);
+        $output = '';
+        $needle = '@section';
+
+        while (($pos = strpos($content, $needle, $offset)) !== false) {
+            $afterName = $pos + strlen($needle);
+            if ($afterName < $length) {
+                $next = $content[$afterName];
+                if (ctype_alnum($next) || $next === '_') {
+                    $output .= substr($content, $offset, $afterName - $offset);
+                    $offset = $afterName;
+                    continue;
+                }
+            }
+
+            $i = $afterName;
+            while ($i < $length && ctype_space($content[$i])) {
+                $i++;
+            }
+            if ($i >= $length || $content[$i] !== '(') {
+                $output .= substr($content, $offset, $afterName - $offset);
+                $offset = $afterName;
+                continue;
+            }
+
+            $extracted = self::extractBalancedParentheses($content, $i);
+            if ($extracted === null) {
+                $output .= substr($content, $offset, $afterName - $offset);
+                $offset = $afterName;
+                continue;
+            }
+
+            [$inner, $closeIndex] = $extracted;
+            $inner = trim($inner);
+
+            // Split name and optional second argument at top-level comma
+            $name = null;
+            $valueExpr = null;
+            $inSingle = $inDouble = false;
+            $depth = 0;
+            $comma = -1;
+            for ($j = 0; $j < strlen($inner); $j++) {
+                $ch = $inner[$j];
+                if ($ch === '\\' && ($inSingle || $inDouble)) {
+                    $j++;
+                    continue;
+                }
+                if (!$inDouble && $ch === "'") {
+                    $inSingle = !$inSingle;
+                    continue;
+                }
+                if (!$inSingle && $ch === '"') {
+                    $inDouble = !$inDouble;
+                    continue;
+                }
+                if ($inSingle || $inDouble) {
+                    continue;
+                }
+                if ($ch === '(') {
+                    $depth++;
+                } elseif ($ch === ')') {
+                    $depth--;
+                } elseif ($ch === ',' && $depth === 0) {
+                    $comma = $j;
+                    break;
+                }
+            }
+
+            if ($comma >= 0) {
+                $nameRaw = trim(substr($inner, 0, $comma));
+                $valueExpr = trim(substr($inner, $comma + 1));
+            } else {
+                $nameRaw = $inner;
+            }
+
+            if (preg_match('/^[\'"](.+)[\'"]$/', $nameRaw, $nm)) {
+                $name = $nm[1];
+            } else {
+                // leave unchanged if unparseable
+                $output .= substr($content, $offset, $closeIndex + 1 - $offset);
+                $offset = $closeIndex + 1;
+                continue;
+            }
+
+            $output .= substr($content, $offset, $pos - $offset);
+            if ($valueExpr !== null && $valueExpr !== '') {
+                $output .= "<?php {$ns}::setSection(" . var_export($name, true) . ", {$valueExpr}); ?>";
+            } else {
+                $output .= "<?php {$ns}::startSection(" . var_export($name, true) . "); ?>";
+            }
+            $offset = $closeIndex + 1;
+        }
+
+        $output .= substr($content, $offset);
+        return $output;
+    }
+
+    /**
      * Compile control structures: @if, @foreach, @while, etc.
+     *
+     * Conditions use balanced-parenthesis parsing so nested calls work:
+     *   @if (count($channels) > 0)
+     *   @if (!empty($user['name']))
+     *   @foreach ($groups as $group)
      */
     public static function compileControlStructures($content)
     {
-        // 1. Handle @foreach ... @empty ... @endforeach FIRST (before plain @foreach conversion)
+        // 1. @foreach ... @empty ... @endforeach before plain @foreach
         $content = self::compileSmartForeach($content);
 
-        // 2. Plain control structures (line-oriented, condition must end the line)
-        $content = preg_replace_callback(
-            '/@if\s*\((.+?)\)/',
-            fn($m) => '<?php if (' . $m[1] . '): ?>',
-            $content
-        );
+        // 2. Directives that take a parenthetical expression (balanced)
+        $content = self::replaceDirectiveExpression($content, 'if', static function (string $expr): string {
+            return '<?php if (' . $expr . '): ?>';
+        });
+        $content = self::replaceDirectiveExpression($content, 'elseif', static function (string $expr): string {
+            return '<?php elseif (' . $expr . '): ?>';
+        });
+        $content = self::replaceDirectiveExpression($content, 'unless', static function (string $expr): string {
+            return '<?php if (!(' . $expr . ')): ?>';
+        });
+        $content = self::replaceDirectiveExpression($content, 'foreach', static function (string $expr): string {
+            return '<?php foreach (' . $expr . '): ?>';
+        });
+        $content = self::replaceDirectiveExpression($content, 'for', static function (string $expr): string {
+            return '<?php for (' . $expr . '): ?>';
+        });
+        $content = self::replaceDirectiveExpression($content, 'while', static function (string $expr): string {
+            return '<?php while (' . $expr . '): ?>';
+        });
+        $content = self::replaceDirectiveExpression($content, 'switch', static function (string $expr): string {
+            return '<?php switch (' . $expr . '): ?>';
+        });
+        $content = self::replaceDirectiveExpression($content, 'case', static function (string $expr): string {
+            return '<?php case ' . $expr . ': ?>';
+        });
+        $content = self::replaceDirectiveExpression($content, 'continue', static function (string $expr): string {
+            return '<?php if (' . $expr . ') continue; ?>';
+        });
+        $content = self::replaceDirectiveExpression($content, 'break', static function (string $expr): string {
+            return '<?php if (' . $expr . ') break; ?>';
+        });
 
-        $content = preg_replace_callback(
-            '/@elseif\s*\((.+?)\)/',
-            fn($m) => '<?php elseif (' . $m[1] . '): ?>',
-            $content
-        );
-
-        $content = preg_replace_callback(
-            '/@unless\s*\((.+?)\)/',
-            fn($m) => '<?php if (!(' . $m[1] . ')): ?>',
-            $content
-        );
-
-        // Remaining plain @foreach (no @empty)
-        $content = preg_replace_callback(
-            '/@foreach\s*\((.+?)\)/',
-            fn($m) => '<?php foreach (' . $m[1] . '): ?>',
-            $content
-        );
-
-        $content = preg_replace_callback(
-            '/@for\s*\((.+?)\)/',
-            fn($m) => '<?php for (' . $m[1] . '): ?>',
-            $content
-        );
-
-        $content = preg_replace_callback(
-            '/@while\s*\((.+?)\)/',
-            fn($m) => '<?php while (' . $m[1] . '): ?>',
-            $content
-        );
-
-        $content = preg_replace_callback(
-            '/@switch\s*\((.+?)\)/',
-            fn($m) => '<?php switch (' . $m[1] . '): ?>',
-            $content
-        );
-
-        $content = preg_replace_callback(
-            '/@case\s*\((.+?)\)/',
-            fn($m) => '<?php case ' . $m[1] . ': ?>',
-            $content
-        );
-
-        // @php ... @endphp — simple, same scope as the template include
+        // @php ... @endphp
         $content = preg_replace_callback(
             '/@php\s*(.*?)\s*@endphp/s',
             function ($m) {
@@ -120,28 +207,15 @@ class DirectiveCompiler
             $content
         );
 
-        // @continue / @break with condition
-        $content = preg_replace_callback(
-            '/@continue\s*\((.+?)\)/',
-            fn($m) => '<?php if (' . $m[1] . ') continue; ?>',
-            $content
-        );
-
-        $content = preg_replace_callback(
-            '/@break\s*\((.+?)\)/',
-            fn($m) => '<?php if (' . $m[1] . ') break; ?>',
-            $content
-        );
-
         // Simple directives without arguments
         $directives = [
             '/@else\b/' => '<?php else: ?>',
-            '/@endif/' => '<?php endif; ?>',
-            '/@endunless/' => '<?php endif; ?>',
-            '/@endforeach/' => '<?php endforeach; ?>',
-            '/@endfor/' => '<?php endfor; ?>',
-            '/@endwhile/' => '<?php endwhile; ?>',
-            '/@endswitch/' => '<?php endswitch; ?>',
+            '/@endif\b/' => '<?php endif; ?>',
+            '/@endunless\b/' => '<?php endif; ?>',
+            '/@endforeach\b/' => '<?php endforeach; ?>',
+            '/@endfor\b/' => '<?php endfor; ?>',
+            '/@endwhile\b/' => '<?php endwhile; ?>',
+            '/@endswitch\b/' => '<?php endswitch; ?>',
             '/@default\b/' => '<?php default: ?>',
             '/@break\b/' => '<?php break; ?>',
             '/@continue\b/' => '<?php continue; ?>',
@@ -155,38 +229,225 @@ class DirectiveCompiler
     }
 
     /**
+     * Replace @name(...) using balanced parentheses (supports nested () inside the condition).
+     *
+     * @param callable(string): string $build
+     */
+    protected static function replaceDirectiveExpression(string $content, string $name, callable $build): string
+    {
+        $needle = '@' . $name;
+        $offset = 0;
+        $length = strlen($content);
+        $output = '';
+
+        while (($pos = strpos($content, $needle, $offset)) !== false) {
+            $afterName = $pos + strlen($needle);
+
+            // Avoid matching a longer directive name (@if vs @ifdef, @for vs @foreach already handled by order)
+            if ($afterName < $length) {
+                $next = $content[$afterName];
+                if (ctype_alnum($next) || $next === '_') {
+                    $output .= substr($content, $offset, $afterName - $offset);
+                    $offset = $afterName;
+                    continue;
+                }
+            }
+
+            $i = $afterName;
+            while ($i < $length && ctype_space($content[$i])) {
+                $i++;
+            }
+
+            if ($i >= $length || $content[$i] !== '(') {
+                // Bare @break / @continue without condition — leave for simple-directive pass
+                $output .= substr($content, $offset, $afterName - $offset);
+                $offset = $afterName;
+                continue;
+            }
+
+            $extracted = self::extractBalancedParentheses($content, $i);
+            if ($extracted === null) {
+                $output .= substr($content, $offset, $afterName - $offset);
+                $offset = $afterName;
+                continue;
+            }
+
+            [$inner, $closeIndex] = $extracted;
+            $output .= substr($content, $offset, $pos - $offset);
+            $output .= $build(trim($inner));
+            $offset = $closeIndex + 1;
+        }
+
+        $output .= substr($content, $offset);
+
+        return $output;
+    }
+
+    /**
+     * Given index of '(', return [innerContents, indexOfClosingParen] or null.
+     * Respects single/double quoted strings and escapes.
+     *
+     * @return array{0:string,1:int}|null
+     */
+    protected static function extractBalancedParentheses(string $content, int $openIndex): ?array
+    {
+        $length = strlen($content);
+        if ($openIndex >= $length || $content[$openIndex] !== '(') {
+            return null;
+        }
+
+        $depth = 0;
+        $inSingle = false;
+        $inDouble = false;
+        $escaped = false;
+
+        for ($i = $openIndex; $i < $length; $i++) {
+            $ch = $content[$i];
+
+            if ($escaped) {
+                $escaped = false;
+                continue;
+            }
+
+            if (($inSingle || $inDouble) && $ch === '\\') {
+                $escaped = true;
+                continue;
+            }
+
+            if (!$inDouble && $ch === "'") {
+                $inSingle = !$inSingle;
+                continue;
+            }
+            if (!$inSingle && $ch === '"') {
+                $inDouble = !$inDouble;
+                continue;
+            }
+            if ($inSingle || $inDouble) {
+                continue;
+            }
+
+            if ($ch === '(') {
+                $depth++;
+            } elseif ($ch === ')') {
+                $depth--;
+                if ($depth === 0) {
+                    $inner = substr($content, $openIndex + 1, $i - $openIndex - 1);
+                    return [$inner, $i];
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * Handle @foreach with optional @empty block.
      * Must run BEFORE plain @foreach conversion.
      */
     protected static function compileSmartForeach($content)
     {
-        $pattern = '/@foreach\s*\((.*?)\)(.*?)@endforeach/s';
+        $offset = 0;
+        $length = strlen($content);
+        $output = '';
+        $needle = '@foreach';
 
-        return preg_replace_callback($pattern, function ($matches) {
-            $expression = trim($matches[1]);
-            $body = $matches[2];
-
-            if (strpos($body, '@empty') === false) {
-                // Leave plain foreach for the later line-oriented converter
-                return $matches[0];
+        while (($pos = strpos($content, $needle, $offset)) !== false) {
+            $afterName = $pos + strlen($needle);
+            if ($afterName < $length) {
+                $next = $content[$afterName];
+                if (ctype_alnum($next) || $next === '_') {
+                    $output .= substr($content, $offset, $afterName - $offset);
+                    $offset = $afterName;
+                    continue;
+                }
             }
 
-            [$foreachContent, $emptyContent] = preg_split('/@empty/', $body, 2);
+            $i = $afterName;
+            while ($i < $length && ctype_space($content[$i])) {
+                $i++;
+            }
+            if ($i >= $length || $content[$i] !== '(') {
+                $output .= substr($content, $offset, $afterName - $offset);
+                $offset = $afterName;
+                continue;
+            }
 
-            // Iterable is the left side of "as" (e.g. $items in "$items as $item")
+            $extracted = self::extractBalancedParentheses($content, $i);
+            if ($extracted === null) {
+                $output .= substr($content, $offset, $afterName - $offset);
+                $offset = $afterName;
+                continue;
+            }
+
+            [$expression, $closeIndex] = $extracted;
+            $expression = trim($expression);
+            $bodyStart = $closeIndex + 1;
+
+            // Find matching @endforeach at depth 0 (nested @foreach supported)
+            $search = $bodyStart;
+            $depth = 1;
+            $endPos = null;
+            while ($search < $length) {
+                $nextForeach = strpos($content, '@foreach', $search);
+                $nextEnd = strpos($content, '@endforeach', $search);
+                if ($nextEnd === false) {
+                    break;
+                }
+                if ($nextForeach !== false && $nextForeach < $nextEnd) {
+                    // ensure not part of a longer token
+                    $nfAfter = $nextForeach + 8;
+                    if ($nfAfter >= $length || (!ctype_alnum($content[$nfAfter]) && $content[$nfAfter] !== '_')) {
+                        $depth++;
+                    }
+                    $search = $nextForeach + 8;
+                    continue;
+                }
+                $depth--;
+                if ($depth === 0) {
+                    $endPos = $nextEnd;
+                    break;
+                }
+                $search = $nextEnd + 11;
+            }
+
+            if ($endPos === null) {
+                $output .= substr($content, $offset, $afterName - $offset);
+                $offset = $afterName;
+                continue;
+            }
+
+            $body = substr($content, $bodyStart, $endPos - $bodyStart);
+
+            if (strpos($body, '@empty') === false) {
+                // Leave for plain @foreach converter
+                $output .= substr($content, $offset, $endPos + 11 - $offset);
+                $offset = $endPos + 11;
+                continue;
+            }
+
+            $parts = preg_split('/@empty\b/', $body, 2);
+            $foreachContent = $parts[0];
+            $emptyContent = $parts[1] ?? '';
+
             $variable = '$items';
-            if (preg_match('/^\s*(.+?)\s+as\s+/i', $expression, $varMatch)) {
+            if (preg_match('/^\s*(.+?)\s+as\s+/is', $expression, $varMatch)) {
                 $variable = trim($varMatch[1]);
-            } elseif (preg_match('/^\s*(\$[A-Za-z_][\w\[\]]*)/', $expression, $varMatch)) {
+            } elseif (preg_match('/^\s*(\$[A-Za-z_][\w]*)/', $expression, $varMatch)) {
                 $variable = $varMatch[1];
             }
 
-            return "<?php if (!empty({$variable})): foreach ({$expression}): ?>"
+            $output .= substr($content, $offset, $pos - $offset);
+            $output .= "<?php if (!empty({$variable})): foreach ({$expression}): ?>"
                 . $foreachContent
                 . "<?php endforeach; else: ?>"
                 . $emptyContent
                 . "<?php endif; ?>";
-        }, $content);
+            $offset = $endPos + 11;
+        }
+
+        $output .= substr($content, $offset);
+
+        return $output;
     }
 
     /**
@@ -484,9 +745,20 @@ class DirectiveCompiler
             $name = var_export($parts['name'], true);
 
             if (isset($parts['default']) && $parts['default'] !== '') {
-                // Default stays inline template text; later compile steps handle {{ }} / @env in it.
-                $output .= "<?php if ({$ns}::hasSection({$name})): echo {$ns}::section({$name}); else: ?>"
-                    . $parts['default'] . "<?php endif; ?>";
+                $default = $parts['default'];
+                // Quoted string → HTML/text default (may still contain {{ }} which later steps compile).
+                // Bare PHP expression (config(...), $var, ...) → evaluate as PHP.
+                $trimmed = trim($default);
+                $isQuoted = (strlen($trimmed) >= 2 && (
+                    ($trimmed[0] === "'" && str_ends_with($trimmed, "'"))
+                    || ($trimmed[0] === '"' && str_ends_with($trimmed, '"'))
+                ));
+                if ($isQuoted || str_contains($trimmed, '{{') || str_starts_with($trimmed, '@')) {
+                    $output .= "<?php if ({$ns}::hasSection({$name})): echo {$ns}::section({$name}); else: ?>"
+                        . $default . "<?php endif; ?>";
+                } else {
+                    $output .= "<?php echo {$ns}::hasSection({$name}) ? {$ns}::section({$name}) : ({$default}); ?>";
+                }
             } else {
                 $output .= "<?php echo {$ns}::section({$name}); ?>";
             }

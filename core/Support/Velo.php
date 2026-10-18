@@ -13,6 +13,16 @@ if (!function_exists('env')) {
 }
 
 /**
+ * Get the current HTTP request.
+ */
+if (!function_exists('request')) {
+    function request(): \Core\Foundation\Http\Request
+    {
+        return new \Core\Foundation\Http\Request();
+    }
+}
+
+/**
  * Configuration value from config/<file>.php using dot notation.
  * config('app.name', 'Sollo')  => config/app.php  ['name' => ...]
  */

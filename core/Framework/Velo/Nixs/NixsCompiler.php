@@ -146,6 +146,17 @@ class NixsCompiler
     }
 
     /**
+     * Set a section value directly (short @section('name', $value)).
+     * First definition wins so child views override layout defaults.
+     */
+    public static function setSection(string $name, mixed $content): void
+    {
+        if (!array_key_exists($name, self::$sections)) {
+            self::$sections[$name] = trim((string) $content);
+        }
+    }
+
+    /**
      * Get the compiled file for a source template, compiling when needed.
      */
     protected static function getCompiledPath($sourcePath)

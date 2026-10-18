@@ -218,7 +218,10 @@ class HttpErrorRenderer
             : "<div class='text-center py-8 text-gray-500'><svg class='w-12 h-12 mx-auto mb-3 opacity-50' fill='none' stroke='currentColor' viewBox='0 0 24 24'><path stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4'/></svg>No session data</div>";
 
         $lineCounter = $codePreview["errorLine"] - count($codePreview["lines"]) / 2;
-        $copyText = addslashes($exceptionClass) . ': ' . addslashes($message) . '\nFile: ' . addslashes($file) . ':' . $line;
+        $copyTextJson = json_encode(
+            "{$exceptionClass}: {$message}\nFile: {$file}:{$line}",
+            JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_THROW_ON_ERROR
+        );
         $googleQuery = urlencode($exceptionClass . " " . $message);
         $soQuery = urlencode($message);
 
@@ -251,11 +254,36 @@ class HttpErrorRenderer
                     activeTab: 'request', 
                     showVendor: false,
                     copied: false,
-                    copyError() {
-                        const text = '{$copyText}';
-                        navigator.clipboard.writeText(text);
-                        this.copied = true;
+                    copyFailed: false,
+                    async copyError() {
+                        const text = {$copyTextJson};
+                        let copied = false;
+                        try {
+                            if (!navigator.clipboard || !window.isSecureContext) {
+                                throw new Error('Clipboard API unavailable');
+                            }
+                            await navigator.clipboard.writeText(text);
+                            copied = true;
+                        } catch {
+                            const textarea = document.createElement('textarea');
+                            textarea.value = text;
+                            textarea.setAttribute('readonly', '');
+                            textarea.style.position = 'fixed';
+                            textarea.style.opacity = '0';
+                            try {
+                                document.body.appendChild(textarea);
+                                textarea.select();
+                                copied = document.execCommand('copy');
+                            } catch {
+                                copied = false;
+                            } finally {
+                                textarea.remove();
+                            }
+                        }
+                        this.copied = copied;
+                        this.copyFailed = !copied;
                         setTimeout(() => this.copied = false, 2000);
+                        setTimeout(() => this.copyFailed = false, 2000);
                     },
                     searchGoogle() {
                         window.open('https://www.google.com/search?q={$googleQuery}', '_blank');
@@ -290,7 +318,7 @@ class HttpErrorRenderer
                                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/>
                                     </svg>
-                                    <span x-text="copied ? 'Copied!' : 'Copy'"></span>
+                                    <span x-text="copied ? 'Copied!' : (copyFailed ? 'Copy failed' : 'Copy')"></span>
                                 </button>
                                 <button @click="searchGoogle()" class="px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg text-sm flex items-center gap-2 transition">
                                     <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">

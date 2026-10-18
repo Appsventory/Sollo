@@ -159,7 +159,8 @@ class Request
 
         $method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
 
-        if (in_array($method, ['PUT', 'PATCH', 'DELETE'], true)
+        if (
+            in_array($method, ['PUT', 'PATCH', 'DELETE'], true)
             && str_starts_with(strtolower(self::contentType()), 'application/x-www-form-urlencoded')
         ) {
             if (self::$formBodyCache === null) {
@@ -667,5 +668,13 @@ class Request
     public function __isset(string $key): bool
     {
         return self::has($key);
+    }
+
+    /**
+     * Get the current URL path without leading or trailing slashes.
+     */
+    public function path(): string
+    {
+        return trim(self::uri(), '/') ?: '/';
     }
 }

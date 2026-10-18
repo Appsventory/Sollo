@@ -15,10 +15,7 @@ class AssetHelper
     public static function asset(string $path): string
     {
         $path = ltrim(str_replace('\\', '/', $path), '/');
-        $base = rtrim((string) (\Core\Support\Env::raw('APP_URL', '')), '/');
-        $rel = '/' . $path;
-
-        return $base === '' ? $rel : $base . $rel;
+        return '/' . $path;
     }
 
     public static function url(string $path): string
