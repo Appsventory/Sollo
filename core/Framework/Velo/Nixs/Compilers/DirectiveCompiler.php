@@ -753,7 +753,11 @@ class DirectiveCompiler
                     ($trimmed[0] === "'" && str_ends_with($trimmed, "'"))
                     || ($trimmed[0] === '"' && str_ends_with($trimmed, '"'))
                 ));
-                if ($isQuoted || str_contains($trimmed, '{{') || str_starts_with($trimmed, '@')) {
+                if ($isQuoted) {
+                    $defaultText = substr($trimmed, 1, -1);
+                    $output .= "<?php if ({$ns}::hasSection({$name})): echo {$ns}::section({$name}); else: ?>"
+                        . $defaultText . "<?php endif; ?>";
+                } elseif (str_contains($trimmed, '{{') || str_starts_with($trimmed, '@')) {
                     $output .= "<?php if ({$ns}::hasSection({$name})): echo {$ns}::section({$name}); else: ?>"
                         . $default . "<?php endif; ?>";
                 } else {
@@ -809,7 +813,6 @@ class DirectiveCompiler
             $name = trim(substr($args, 0, $commaPos));
             $name = preg_replace('/^[\'"]|[\'"]$/', '', $name);
             $default = trim(substr($args, $commaPos + 1));
-            $default = preg_replace('/^[\'"]|[\'"]$/', '', $default);
             return ['name' => $name, 'default' => $default];
         }
     }

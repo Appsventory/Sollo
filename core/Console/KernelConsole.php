@@ -26,6 +26,7 @@ class KernelConsole
     use ConsoleOutputFormatter;
 
     protected $commands = [];
+    protected array $applicationCommandNames = [];
 
     public function __construct()
     {
@@ -70,6 +71,30 @@ class KernelConsole
             'nixs:clear' => CacheCommand::class,
             'route:list' => RouteListCommand::class,
         ];
+
+        $applicationCommands = function_exists('config') ? config('app.commands', []) : [];
+        if (!is_array($applicationCommands)) {
+            throw new \UnexpectedValueException('The app.commands configuration must be an array.');
+        }
+        foreach ($applicationCommands as $name => $class) {
+            if (!is_string($name) || preg_match('/^[A-Za-z0-9][A-Za-z0-9:_-]*$/', $name) !== 1) {
+                throw new \UnexpectedValueException('Application command names must be non-empty CLI identifiers.');
+            }
+            if (
+                !is_string($class)
+                || !class_exists($class)
+                || !is_subclass_of($class, \Core\Console\Commands\BaseCommand::class)
+            ) {
+                throw new \UnexpectedValueException(
+                    "Application command '{$name}' must reference a BaseCommand subclass."
+                );
+            }
+            if (isset($this->commands[$name])) {
+                throw new \UnexpectedValueException("Application command '{$name}' conflicts with a built-in command.");
+            }
+            $this->commands[$name] = $class;
+            $this->applicationCommandNames[] = $name;
+        }
     }
 
     /**
@@ -189,6 +214,12 @@ class KernelConsole
         echo "  \e[36mcache:clear\e[0m                                  Clear app & Nixs view cache\n";
         echo "  \e[36mnixs:clear\e[0m                                   Alias for cache:clear (views)\n";
         echo "  \e[36mroute:list\e[0m                                   List all registered routes\n";
+        if ($this->applicationCommandNames !== []) {
+            echo "\n\e[1;32m📦 APPLICATION COMMANDS:\e[0m\n";
+            foreach ($this->applicationCommandNames as $name) {
+                echo "  \e[36m{$name}\e[0m\n";
+            }
+        }
 
         echo "\n\e[1;32m📋 ROUTE OPTIONS:\e[0m\n";
         echo "       \e[2m--G          Add GET route → index()\e[0m\n";
@@ -235,4 +266,5 @@ class KernelConsole
         echo "  \e[2mCopyright (c) " . Sollo::RELEASE_YEAR . " " . Sollo::NAME . "(" . Sollo::CODENAME . ")\e[0m\n";
         echo "\n";
     }
+
 }
